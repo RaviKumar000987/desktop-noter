@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+    />
+    <title>Entering Mode!</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <!-- titlebar start -->
+    <div id="titlebar">
+      <div class="logo">
+        <span class="logo">Noter App!</span>
+      </div>
+      <div class="option-btn">
+        <button id="minimize">−</button>
+        <button id="maximize">□</button>
+        <button id="close">×</button>
+      </div>
+    </div>
+    <!-- titlebar end -->
+
+    <!-- menu bar start -->
+    <div id="menubar">
+      <div class="menu-item">
+        File
+        <div class="dropdown">
+          <div class="menu-option" id="newFile">New</div>
+          <div class="menu-option" id="openFile">Open</div>
+          <div class="menu-option" id="saveFile">Save</div>
+          <div class="menu-option">Save As</div>
+          <div class="separator"></div>
+          <div class="menu-option">Quit</div>
+        </div>
+      </div>
+      <div class="menu-item">
+        Edit
+        <div class="dropdown">
+          <div class="menu-option">Undo</div>
+          <div class="menu-option">Redo</div>
+          <div class="separator"></div>
+          <div class="menu-option">Cut</div>
+          <div class="menu-option">Copy</div>
+          <div class="menu-option">Paste</div>
+          <div class="menu-option">Select All</div>
+        </div>
+      </div>
+      <div class="menu-item">
+        View
+        <div class="dropdown">
+          <div class="menu-option">Zoom In</div>
+          <div class="menu-option">Zoom Out</div>
+          <div class="menu-option">Reset Zoom</div>
+          <div class="separator"></div>
+          <div class="menu-option">Word Wrap</div>
+        </div>
+      </div>
+      <div class="menu-item">
+        Help
+        <div class="dropdown">
+          <div class="menu-option">Documentation</div>
+          <div class="menu-option">Shortcuts</div>
+          <div class="separator"></div>
+          <div class="menu-option">About</div>
+        </div>
+      </div>
+    </div>
+    <!-- menu bar end -->
+
+    <!-- editor portion start -->
+    <div id="editor"></div>
+    <!-- editor portion end -->
+
+    <!-- statusbar start -->
+    <div id="statusbar">
+      <div class="status-left">
+        <span id="language">Plain Text</span>
+        <span>UTF-8</span>
+      </div>
+
+      <div class="status-right">
+        <span id="wordCount">Words: 0</span>
+        <span id="cursorPosition">Ln 1, Col 1</span>
+        <span>Spaces: 4</span>
+        <span>Ready</span>
+      </div>
+    </div>
+    <!-- statusbar end -->
+
+    <!-- javascript -->
+    <script src="./node_modules/monaco-editor/min/vs/loader.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
