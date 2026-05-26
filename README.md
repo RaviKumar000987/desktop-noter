@@ -209,3 +209,109 @@ Built by Ravi Kumar - sparrow.
 ---
 
 ⭐ Star this repository if you like the project.
+
+## 🚀 Installation Guide
+
+### 1. Clone Repository
+
+```bash
+git clone YOUR_REPOSITORY_URL
+```
+
+Example:
+
+```bash
+git clone https://github.com/RaviKumar000987/desktop-noter.git
+```
+
+---
+
+### 2. Move Into Project Folder
+
+```bash
+cd desktop-noter
+```
+
+---
+
+### 3. Install Dependencies
+
+```bash
+npm install
+```
+
+This command installs all required packages automatically from:
+
+- package.json
+- package-lock.json
+
+---
+
+### 4. Run Application
+
+```bash
+npm start
+```
+
+Application will launch automatically.
+
+---
+
+## 🛠 Requirements
+
+Install before running:
+
+### Node.js
+
+Recommended:
+
+```
+Node.js v22+
+```
+
+Check installed version:
+
+```bash
+node --version
+```
+
+---
+
+### npm
+
+Check npm:
+
+```bash
+npm --version
+```
+
+---
+
+### Git
+
+Check Git:
+
+```bash
+git --version
+```
+
+---
+
+## ⚡ Quick Setup
+
+For developers:
+
+```bash
+git clone https://github.com/RaviKumar000987/desktop-noter.git
+
+cd desktop-noter
+
+npm install
+
+npm start
+```
+
+Done 🎉
+
+⚠ This project is currently under active development.
+Features may change over time.
