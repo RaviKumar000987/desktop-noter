@@ -2,14 +2,19 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: "Dank Mono";
+  font-family:
+    "Dank Mono", "Cascadia Code", "Fira Code", Consolas, "Courier New",
+    monospace;
 }
 
 body {
   background: linear-gradient(135deg, #1c1d1c 0%, #17191a 100%);
+  overflow: hidden;
 }
 
-/* titlebar design start */
+/* ═══════════════════════════════════════════
+   TITLE BAR
+═══════════════════════════════════════════ */
 #titlebar {
   width: 100%;
   height: 47px;
@@ -21,11 +26,18 @@ body {
   -webkit-app-region: drag;
 }
 
-#titlebar .logo {
-  color: #e6e6e6;
-  align-items: center;
+.title-logo {
   display: flex;
-  font-size: 18px;
+  align-items: center;
+  gap: 6px;
+  color: #e6e6e6;
+  font-size: 15px;
+}
+
+.modified-dot {
+  color: #ff7b72;
+  font-size: 13px;
+  line-height: 1;
 }
 
 #titlebar .option-btn {
@@ -44,22 +56,25 @@ body {
   background: transparent;
   color: #e6e6e6;
   font-size: 16px;
-  transition: 0.2s;
+  transition:
+    background 0.15s,
+    transform 0.15s;
   -webkit-app-region: no-drag;
+  cursor: pointer;
 }
 
 .option-btn button:hover {
   background: #3b3b3b;
   transform: scale(1.05);
-  cursor: pointer;
 }
 
 .option-btn #close:hover {
   background: #e81123;
-  transform: scale(1.05);
 }
-/* titlebar design end */
-/* menubar design end */
+
+/* ═══════════════════════════════════════════
+   MENU BAR
+═══════════════════════════════════════════ */
 #menubar {
   width: 100%;
   height: 38px;
@@ -75,7 +90,7 @@ body {
   position: relative;
   color: #e6e6e6;
   padding: 8px 14px;
-  font-size: 15px;
+  font-size: 14px;
   cursor: pointer;
   border-radius: 5px;
 }
@@ -84,17 +99,20 @@ body {
   background: #2d2d2d;
 }
 
+/* ─── Dropdown ─────────────────────────────── */
 .dropdown {
   position: absolute;
   top: calc(100% + 7px);
   left: 0;
-  min-width: 120px;
+  min-width: 200px;
   background: #222;
   border: 1px solid #444;
-  border-top-left-radius: 10px;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 10px;
   border-bottom-right-radius: 10px;
-  overflow: hidden;
-  box-sizing: 0 8px 18px rgba(0, 0, 0, 0.35);
+  border-bottom-left-radius: 10px;
+  overflow: visible; /* allow submenu to overflow */
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
   z-index: 999;
   display: none;
 }
@@ -104,53 +122,112 @@ body {
 }
 
 .menu-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 10px 16px;
   color: #e6e6e6;
-  font-size: 14px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .menu-option:hover {
   background: #353535;
 }
 
+.menu-option.disabled {
+  color: #666;
+  cursor: default;
+}
+
+.menu-option.disabled:hover {
+  background: transparent;
+}
+
+/* Keyboard shortcut hints */
+.shortcut {
+  opacity: 0.45;
+  font-size: 11px;
+  margin-left: 24px;
+}
+
 .separator {
   height: 1px;
-  background: #444;
+  background: #3a3a3a;
   margin: 4px 0;
 }
-/* menu design end */
-/* editor design start */
+
+/* ─── Submenu (Recent Files) ────────────────── */
+.has-submenu {
+  position: relative;
+}
+
+.submenu-arrow {
+  opacity: 0.6;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+.submenu {
+  position: absolute;
+  left: 100%;
+  top: -1px;
+  min-width: 220px;
+  max-width: 360px;
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 8px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  display: none;
+  overflow: hidden;
+}
+
+.has-submenu:hover .submenu {
+  display: block;
+}
+
+/* ═══════════════════════════════════════════
+   EDITOR
+═══════════════════════════════════════════ */
 #editor {
   width: 100%;
   height: calc(100vh - 113px);
 }
-/* editor design end */
-/* monaco editor design start */
+
+/* Remove Monaco default border / outline */
 .monaco-editor,
 .monaco-editor .margin,
 .monaco-editor-background {
   border: none !important;
   outline: none !important;
 }
-/* monaco editor design end */
 
-/* statusbar design start */
+/* ═══════════════════════════════════════════
+   STATUS BAR
+═══════════════════════════════════════════ */
 #statusbar {
   height: 28px;
   background: #181818;
   border-top: 1px solid #303030;
   display: flex;
-  justify-content: space-around;
+  justify-content: space-between;
   align-items: center;
   padding: 0 12px;
-  color: #cfcfcf;
-  font-size: 14px;
+  color: #9a9a9a;
+  font-size: 12px;
   user-select: none;
 }
 
 .status-left,
 .status-right {
   display: flex;
-  gap: 18px;
+  align-items: center;
+  gap: 16px;
 }
-/* statusbar design end */
+
+#language {
+  color: #569cd6;
+  font-weight: 600;
+}

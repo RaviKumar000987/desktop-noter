@@ -7,14 +7,17 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
     />
-    <title>Entering Mode!</title>
+    <title>Noter App</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <!-- titlebar start -->
+    <!-- ══════════════ TITLE BAR ══════════════ -->
     <div id="titlebar">
-      <div class="logo">
-        <span class="logo">Noter App!</span>
+      <div class="title-logo">
+        <span id="modifiedDot" class="modified-dot" style="display: none"
+          >●</span
+        >
+        <span id="titleFileName">Untitled — Noter</span>
       </div>
       <div class="option-btn">
         <button id="minimize">−</button>
@@ -22,43 +25,93 @@
         <button id="close">×</button>
       </div>
     </div>
-    <!-- titlebar end -->
 
-    <!-- menu bar start -->
+    <!-- ══════════════ MENU BAR ══════════════ -->
     <div id="menubar">
+      <!-- File -->
       <div class="menu-item">
         File
         <div class="dropdown">
-          <div class="menu-option" id="newFile">New</div>
-          <div class="menu-option" id="openFile">Open</div>
-          <div class="menu-option" id="saveFile">Save</div>
-          <div class="menu-option" id="saveAsFile">Save As</div>
+          <div class="menu-option" id="newFile">
+            New <span class="shortcut">Ctrl+N</span>
+          </div>
+          <div class="menu-option" id="openFile">
+            Open <span class="shortcut">Ctrl+O</span>
+          </div>
+          <div class="separator"></div>
+          <div class="menu-option" id="saveFile">
+            Save <span class="shortcut">Ctrl+S</span>
+          </div>
+          <div class="menu-option" id="saveAsFile">
+            Save As <span class="shortcut">Ctrl+⇧+S</span>
+          </div>
+          <div class="separator"></div>
+          <!-- Recent Files submenu -->
+          <div class="menu-option has-submenu" id="recentFilesMenu">
+            Recent Files <span class="submenu-arrow">▸</span>
+            <div class="submenu" id="recentFilesSubmenu"></div>
+          </div>
           <div class="separator"></div>
           <div class="menu-option" id="quitApp">Quit</div>
         </div>
       </div>
+
+      <!-- Edit -->
       <div class="menu-item">
         Edit
         <div class="dropdown">
-          <div class="menu-option" id="undoAction">Undo</div>
-          <div class="menu-option" id="redoAction">Redo</div>
+          <div class="menu-option" id="undoAction">
+            Undo <span class="shortcut">Ctrl+Z</span>
+          </div>
+          <div class="menu-option" id="redoAction">
+            Redo <span class="shortcut">Ctrl+Y</span>
+          </div>
           <div class="separator"></div>
-          <div class="menu-option" id="cutAction">Cut</div>
-          <div class="menu-option" id="copyAction">Copy</div>
-          <div class="menu-option" id="pasteAction">Paste</div>
-          <div class="menu-option" id="selectAllAction">Select All</div>
+          <div class="menu-option" id="cutAction">
+            Cut <span class="shortcut">Ctrl+X</span>
+          </div>
+          <div class="menu-option" id="copyAction">
+            Copy <span class="shortcut">Ctrl+C</span>
+          </div>
+          <div class="menu-option" id="pasteAction">
+            Paste <span class="shortcut">Ctrl+V</span>
+          </div>
+          <div class="menu-option" id="selectAllAction">
+            Select All <span class="shortcut">Ctrl+A</span>
+          </div>
+          <div class="separator"></div>
+          <div class="menu-option" id="duplicateLineAction">
+            Duplicate Line <span class="shortcut">Ctrl+D</span>
+          </div>
+          <div class="separator"></div>
+          <div class="menu-option" id="findAction">
+            Find <span class="shortcut">Ctrl+F</span>
+          </div>
+          <div class="menu-option" id="replaceAction">
+            Find &amp; Replace <span class="shortcut">Ctrl+H</span>
+          </div>
         </div>
       </div>
+
+      <!-- View -->
       <div class="menu-item">
         View
         <div class="dropdown">
-          <div class="menu-option" id="zoomIn">Zoom In</div>
-          <div class="menu-option" id="zoomOut">Zoom Out</div>
-          <div class="menu-option" id="resetZoom">Reset Zoom</div>
+          <div class="menu-option" id="zoomIn">
+            Zoom In <span class="shortcut">Ctrl++</span>
+          </div>
+          <div class="menu-option" id="zoomOut">
+            Zoom Out <span class="shortcut">Ctrl+−</span>
+          </div>
+          <div class="menu-option" id="resetZoom">
+            Reset Zoom <span class="shortcut">Ctrl+0</span>
+          </div>
           <div class="separator"></div>
-          <div class="menu-option" id="wordWrap">Word Wrap</div>
+          <div class="menu-option" id="wordWrap">Toggle Word Wrap</div>
         </div>
       </div>
+
+      <!-- Help -->
       <div class="menu-item">
         Help
         <div class="dropdown">
@@ -71,25 +124,26 @@
     </div>
     <!-- menu bar end -->
 
-    <!-- editor portion start -->
+    <!-- ══════════════ EDITOR ══════════════ -->
     <div id="editor"></div>
-    <!-- editor portion end -->
 
-    <!-- statusbar start -->
+    <!-- ══════════════ STATUS BAR ══════════════ -->
     <div id="statusbar">
       <div class="status-left">
         <span id="language">Plain Text</span>
         <span>UTF-8</span>
       </div>
-
       <div class="status-right">
         <span id="wordCount">Words: 0</span>
+        <span id="charCount">Chars: 0</span>
+        <span id="lineCount">Lines: 0</span>
+        <span id="zoomStatus">100%</span>
+        <span id="wrapStatus">Wrap ON</span>
         <span id="cursorPosition">Ln 1, Col 1</span>
         <span>Spaces: 4</span>
-        <span>Ready</span>
+        <span id="fileStatus">Untitled</span>
       </div>
     </div>
-    <!-- statusbar end -->
 
     <!-- javascript -->
     <script src="./node_modules/monaco-editor/min/vs/loader.js"></script>

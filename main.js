@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const fs = require("fs");
 const path = require("node:path");
 let mainWindow;
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -16,62 +17,106 @@ function createWindow() {
     },
   });
   mainWindow.loadFile("./index.html");
-  //   mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
   createWindow();
-
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
+  if (process.platform !== "darwin") app.quit();
 });
 
-ipcMain.on("window-minimize", () => {
-  mainWindow.minimize();
-});
+// ─── Window Controls ────────────────────────────────────────────────────────
+ipcMain.on("window-minimize", () => mainWindow.minimize());
 
 ipcMain.on("window-maximize", () => {
-  if (mainWindow.isMaximized()) {
-    mainWindow.unmaximize();
-  } else {
-    mainWindow.maximize();
-  }
+  if (mainWindow.isMaximized()) mainWindow.unmaximize();
+  else mainWindow.maximize();
 });
 
-ipcMain.on("window-close", () => {
-  mainWindow.close();
-});
+ipcMain.on("window-close", () => mainWindow.close());
 
-ipcMain.on("quit-app", () => {
-  app.quit();
-});
+ipcMain.on("quit-app", () => app.quit());
+
+// ─── File Operations ─────────────────────────────────────────────────────────
+const FILE_FILTERS = [
+  {
+    name: "All Supported Files",
+    extensions: [
+      "txt",
+      "js",
+      "mjs",
+      "ts",
+      "jsx",
+      "tsx",
+      "html",
+      "htm",
+      "css",
+      "scss",
+      "less",
+      "json",
+      "jsonc",
+      "md",
+      "markdown",
+      "py",
+      "rb",
+      "php",
+      "java",
+      "c",
+      "h",
+      "cpp",
+      "cc",
+      "cs",
+      "go",
+      "rs",
+      "sh",
+      "bash",
+      "xml",
+      "svg",
+      "yaml",
+      "yml",
+      "sql",
+    ],
+  },
+  { name: "Text Files", extensions: ["txt"] },
+  {
+    name: "JavaScript / TypeScript",
+    extensions: ["js", "ts", "jsx", "tsx", "mjs"],
+  },
+  { name: "Web Files", extensions: ["html", "htm", "css", "scss", "less"] },
+  {
+    name: "Data / Config",
+    extensions: ["json", "jsonc", "xml", "yaml", "yml", "sql"],
+  },
+  { name: "Markdown", extensions: ["md", "markdown"] },
+  { name: "Python", extensions: ["py"] },
+  { name: "All Files", extensions: ["*"] },
+];
 
 ipcMain.handle("open-file", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openFile"],
-    filters: [
-      {
-        name: "Text Files",
-        extensions: ["txt", "js", "html", "css", "json", "md", "py"],
-      },
-    ],
+    filters: FILE_FILTERS,
   });
   if (result.canceled) return null;
   const filePath = result.filePaths[0];
   const content = fs.readFileSync(filePath, "utf-8");
-  return {
-    filePath,
-    content,
-  };
+  return { filePath, content };
+});
+
+// Open a specific file path (used by Recent Files)
+ipcMain.handle("open-file-by-path", async (e, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    return { filePath, content };
+  } catch {
+    return null;
+  }
 });
 
 ipcMain.handle("save-file", async (e, data) => {
@@ -88,10 +133,15 @@ ipcMain.handle("save-as-file", async (e, content) => {
     title: "Save File",
     defaultPath: "untitled.txt",
     filters: [
-      {
-        name: "Text Files",
-        extensions: ["txt", "js", "html", "css", "json", "md", "py"],
-      },
+      { name: "Text File", extensions: ["txt"] },
+      { name: "JavaScript", extensions: ["js"] },
+      { name: "TypeScript", extensions: ["ts"] },
+      { name: "HTML", extensions: ["html"] },
+      { name: "CSS", extensions: ["css"] },
+      { name: "JSON", extensions: ["json"] },
+      { name: "Markdown", extensions: ["md"] },
+      { name: "Python", extensions: ["py"] },
+      { name: "All Files", extensions: ["*"] },
     ],
   });
   if (result.canceled) return null;
@@ -99,8 +149,7 @@ ipcMain.handle("save-as-file", async (e, content) => {
   return result.filePath;
 });
 
-// help => documentation section start
+// ─── Help → Documentation ─────────────────────────────────────────────────
 ipcMain.handle("open-external", async (e, url) => {
   await shell.openExternal(url);
 });
-// help => documentation section end
