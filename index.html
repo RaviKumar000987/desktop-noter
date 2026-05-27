@@ -9,14 +9,16 @@
     />
     <title>Noter App</title>
     <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./features.css" />
   </head>
   <body>
-    <!-- ══════════════ TITLE BAR ══════════════ -->
+
+    <!-- ══════════════════════════════════════════
+         TITLE BAR  (48 px)
+    ══════════════════════════════════════════ -->
     <div id="titlebar">
       <div class="title-logo">
-        <span id="modifiedDot" class="modified-dot" style="display: none"
-          >●</span
-        >
+        <span id="modifiedDot" class="modified-dot" style="display:none">●</span>
         <span id="titleFileName">Untitled — Noter</span>
       </div>
       <div class="option-btn">
@@ -26,17 +28,36 @@
       </div>
     </div>
 
-    <!-- ══════════════ MENU BAR ══════════════ -->
+    <!-- ══════════════════════════════════════════
+         MENU BAR  (36 px)
+    ══════════════════════════════════════════ -->
     <div id="menubar">
+
+      <!-- Sidebar toggle button -->
+      <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Explorer (Ctrl+B)">
+        <svg width="15" height="12" viewBox="0 0 15 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect y="0"  width="15" height="2" rx="1" fill="currentColor"/>
+          <rect y="5"  width="15" height="2" rx="1" fill="currentColor"/>
+          <rect y="10" width="15" height="2" rx="1" fill="currentColor"/>
+        </svg>
+      </button>
+
       <!-- File -->
       <div class="menu-item">
         File
         <div class="dropdown">
           <div class="menu-option" id="newFile">
-            New <span class="shortcut">Ctrl+N</span>
+            New File <span class="shortcut">Ctrl+N</span>
           </div>
+          <div class="menu-option" id="newTab">
+            New Tab <span class="shortcut">Ctrl+T</span>
+          </div>
+          <div class="separator"></div>
           <div class="menu-option" id="openFile">
-            Open <span class="shortcut">Ctrl+O</span>
+            Open File <span class="shortcut">Ctrl+O</span>
+          </div>
+          <div class="menu-option" id="openFolder">
+            Open Folder
           </div>
           <div class="separator"></div>
           <div class="menu-option" id="saveFile">
@@ -45,6 +66,10 @@
           <div class="menu-option" id="saveAsFile">
             Save As <span class="shortcut">Ctrl+⇧+S</span>
           </div>
+          <div class="separator"></div>
+          <div class="menu-option" id="createWorkspace">New Workspace</div>
+          <div class="menu-option" id="saveWorkspace">Save Workspace</div>
+          <div class="menu-option" id="openWorkspace">Open Workspace</div>
           <div class="separator"></div>
           <!-- Recent Files submenu -->
           <div class="menu-option has-submenu" id="recentFilesMenu">
@@ -97,6 +122,10 @@
       <div class="menu-item">
         View
         <div class="dropdown">
+          <div class="menu-option" id="toggleExplorerMenu">
+            Toggle Explorer <span class="shortcut">Ctrl+B</span>
+          </div>
+          <div class="separator"></div>
           <div class="menu-option" id="zoomIn">
             Zoom In <span class="shortcut">Ctrl++</span>
           </div>
@@ -108,6 +137,19 @@
           </div>
           <div class="separator"></div>
           <div class="menu-option" id="wordWrap">Toggle Word Wrap</div>
+          <div class="separator"></div>
+          <div class="menu-option" id="toggleTerminalMenu">
+            Terminal <span class="shortcut">Ctrl+J</span>
+          </div>
+          <div class="menu-option" id="toggleSplitMenu">
+            Split Editor <span class="shortcut">Ctrl+\</span>
+          </div>
+          <div class="menu-option" id="commandPaletteMenu">
+            Command Palette <span class="shortcut">Ctrl+⇧+P</span>
+          </div>
+          <div class="menu-option" id="globalSearchMenu">
+            Global Search <span class="shortcut">Ctrl+⇧+F</span>
+          </div>
         </div>
       </div>
 
@@ -122,12 +164,99 @@
         </div>
       </div>
     </div>
-    <!-- menu bar end -->
+    <!-- /menubar -->
 
-    <!-- ══════════════ EDITOR ══════════════ -->
-    <div id="editor"></div>
+    <!-- ══════════════════════════════════════════
+         TAB BAR  (36 px)
+    ══════════════════════════════════════════ -->
+    <div id="tabbar">
+      <div id="tabs-container">
+        <div id="tabs-list"></div>
+      </div>
+      <button id="new-tab-btn" title="New Tab (Ctrl+T)">+</button>
+    </div>
 
-    <!-- ══════════════ STATUS BAR ══════════════ -->
+    <!-- ══════════════════════════════════════════
+         MAIN CONTENT  =  Sidebar  +  Editor
+    ══════════════════════════════════════════ -->
+    <div id="main-content">
+
+      <!-- ── Sidebar / Explorer ────────────────── -->
+      <div id="sidebar">
+        <div id="sidebar-header">
+          <span class="sidebar-title">EXPLORER</span>
+          <div class="sidebar-header-actions">
+            <button class="sidebar-btn" id="refresh-explorer-btn" title="Refresh">↻</button>
+            <button class="sidebar-btn" id="open-folder-btn" title="Open Folder">📂</button>
+            <button class="sidebar-btn" id="gs-search-btn" title="Search (Ctrl+Shift+F)">⌕</button>
+          </div>
+        </div>
+
+        <!-- No folder open state -->
+        <div id="no-folder-msg">
+          <p>No folder opened</p>
+          <button id="open-folder-btn2">Open Folder</button>
+        </div>
+
+        <!-- Explorer tree (visible when folder is open) -->
+        <div id="explorer-content">
+          <div id="folder-name"></div>
+          <div id="explorer-tree"></div>
+        </div>
+
+        <!-- Global Search panel (toggled via search-mode class on #sidebar) -->
+        <div id="search-panel">
+          <div id="gs-toolbar">
+            <input id="gs-input" type="text" placeholder="Search in files…"
+                   autocomplete="off" spellcheck="false"/>
+            <div id="gs-options">
+              <button class="gs-opt-btn" id="gs-case-btn"  title="Case Sensitive">Aa</button>
+              <button class="gs-opt-btn" id="gs-regex-btn" title="Use Regex">.*</button>
+            </div>
+          </div>
+          <div id="gs-stats"></div>
+          <div id="gs-results"></div>
+        </div>
+      </div>
+
+      <!-- Resize handle between sidebar and editor -->
+      <div id="resize-handle"></div>
+
+      <!-- ── Editor area ───────────────────────── -->
+      <div id="editor-area">
+
+        <!-- editor-wrapper holds main editor + optional split pane -->
+        <div id="editor-wrapper">
+          <div id="editor"></div>
+          <!-- SplitEditor.open() appends #se-right-pane here -->
+        </div>
+
+        <!-- Terminal panel (toggled by TerminalPanel.toggle / Ctrl+J) -->
+        <div id="terminal-panel">
+          <div id="tp-resize" title="Drag to resize"></div>
+          <div id="tp-header">
+            <span class="tp-title">⊢ TERMINAL</span>
+            <div style="display:flex;gap:2px">
+              <button class="sidebar-btn" id="terminal-clear-btn" title="Clear output">⊗</button>
+              <button class="sidebar-btn" id="terminal-close-btn" title="Close Terminal (Ctrl+J)">×</button>
+            </div>
+          </div>
+          <div id="terminal-output"></div>
+          <div id="tp-input-row">
+            <span id="terminal-prompt">~ ❯ </span>
+            <input id="terminal-input" type="text" autocomplete="off"
+                   spellcheck="false" placeholder="Enter command…"/>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+    <!-- /main-content -->
+
+    <!-- ══════════════════════════════════════════
+         STATUS BAR  (28 px)
+    ══════════════════════════════════════════ -->
     <div id="statusbar">
       <div class="status-left">
         <span id="language">Plain Text</span>
@@ -145,8 +274,12 @@
       </div>
     </div>
 
-    <!-- javascript -->
+    <!-- ── Scripts ──────────────────────────────── -->
     <script src="./node_modules/monaco-editor/min/vs/loader.js"></script>
     <script src="./app.js"></script>
+    <script src="./terminal.js"></script>
+    <script src="./split-editor.js"></script>
+    <script src="./global-search.js"></script>
+    <script src="./command-palette.js"></script>
   </body>
 </html>
