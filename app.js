@@ -1,3 +1,4 @@
+let currentFilePath = null;
 require.config({
   paths: {
     vs: "./node_modules/monaco-editor/min/vs",
@@ -79,10 +80,9 @@ require(["vs/editor/editor.main"], function () {
 });
 
 // menu ke sub-menus - new, open, save, save as, quit
-// new file listener
+// new file listener start
 document.getElementById("newFile").addEventListener("click", () => {
   if (!window.editor) return;
-
   const text = window.editor.getValue();
   if (text.trim() != "") {
     const ok = confirm("create new file?");
@@ -96,15 +96,52 @@ document.getElementById("newFile").addEventListener("click", () => {
   window.editor.focus();
   closeAllMenus();
 });
+// new file listener end
 
-// open file listener
+// open file listener start
 document.getElementById("openFile").addEventListener("click", async () => {
   const file = await window.electronAPI.openFile();
   if (!file) return;
   window.editor.setValue(file.content);
+  currentFilePath = file.filePath;
   closeAllMenus();
   window.editor.focus();
 });
+// open file listener end
+
+// save file listener start
+document.getElementById("saveFile").addEventListener("click", async () => {
+  if (!currentFilePath) {
+    alert("Open a file first!");
+    return;
+  }
+  const content = window.editor.getValue();
+  const saved = await window.electronAPI.saveFile({
+    path: currentFilePath,
+    content,
+  });
+  if (saved) {
+    console.log("Saved!");
+  }
+  closeAllMenus();
+});
+// save file listener end
+
+// save-as-file listener start
+document.getElementById("saveAsFile").addEventListener("click", async () => {
+  const content = window.editor.getValue();
+  const filePath = await window.electronAPI.saveAsFile(content);
+  if (!filePath) return;
+  currentFilePath = filePath;
+  closeAllMenus();
+});
+// save-as-file listener end
+
+// quit app start
+document.getElementById("quitApp").addEventListener("click", () => {
+  window.electronAPI.quit();
+});
+// quit app end
 
 // minimize, maximize, close functions
 document.getElementById("minimize").addEventListener("click", () => {

@@ -7,7 +7,12 @@
     "live": "electronmon .",
     "build": "electron-builder"
   },
-  "keywords": [],
+  "keywords": [
+    "noter",
+    "advance-notepad",
+    "professional-notepad",
+    "noter-app"
+  ],
   "author": "Sparrow",
   "license": "ISC",
   "description": "",

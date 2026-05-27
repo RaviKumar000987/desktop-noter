@@ -51,6 +51,10 @@ ipcMain.on("window-close", () => {
   mainWindow.close();
 });
 
+ipcMain.on("quit-app", () => {
+  app.quit();
+});
+
 ipcMain.handle("open-file", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openFile"],
@@ -68,4 +72,29 @@ ipcMain.handle("open-file", async () => {
     filePath,
     content,
   };
+});
+
+ipcMain.handle("save-file", async (e, data) => {
+  try {
+    fs.writeFileSync(data.path, data.content, "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle("save-as-file", async (e, content) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: "Save File",
+    defaultPath: "untitled.txt",
+    filters: [
+      {
+        name: "Text Files",
+        extensions: ["txt", "js", "html", "css", "json", "md", "py"],
+      },
+    ],
+  });
+  if (result.canceled) return null;
+  fs.writeFileSync(result.filePath, content, "utf8");
+  return result.filePath;
 });
