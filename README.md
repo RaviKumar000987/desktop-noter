@@ -1,352 +1,504 @@
-🧠 Noter App
+<div align="center">
 
-A modern, intelligent, extensible desktop IDE built with Electron + Monaco Editor.
-Designed for developers who want the power of VS Code, the smoothness of Sublime, and the aesthetics of modern desktop software. 🚀
+# 🧠 Noter
 
-✨ Overview
+### Modern Intelligent Developer Workspace
 
-Noter App is a next-generation developer-focused code editor and IDE platform built from scratch using:
+A next-generation desktop IDE built with **Electron + Monaco Editor**
+designed for developers who want the power of VS Code,
+the speed of Sublime, and the elegance of modern desktop software.
 
-Electron
-Monaco Editor (VS Code Engine)
-HTML/CSS/JavaScript
-Secure IPC Architecture
-Extension Marketplace System
+<br>
 
-It started as a lightweight notepad project and evolved into a powerful modern IDE ecosystem with:
+![Electron](https://img.shields.io/badge/Electron-Desktop-blue?style=for-the-badge&logo=electron)
+![Monaco](https://img.shields.io/badge/Monaco-Editor-0078D4?style=for-the-badge)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES2025-yellow?style=for-the-badge&logo=javascript)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-black?style=for-the-badge)
+![Marketplace](https://img.shields.io/badge/Marketplace-Integrated-purple?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-✅ Workspace support
-✅ Multi-tabs
-✅ Split editors
-✅ Integrated terminal
-✅ Extension marketplace
-✅ IntelliSense engine
-✅ Explorer system
-✅ VS Code-like workflows
-✅ Smart indexing
-✅ Advanced UI/UX polish
+<br>
 
-🖼️ Screenshots
-⚙️ Settings System
+> ⚡ Fast like Sublime
+> 🧠 Smart like VS Code
+> 🌌 Designed for the next generation of coding workflows
 
-Modern VS Code-inspired settings UI with live configuration support.
+</div>
 
-🧩 Extension Marketplace
+---
 
-Professional marketplace with install/uninstall system, categories, featured extensions, and GitHub-backed registry architecture.
+# ✨ Why Noter?
 
-📁 Workspace Explorer + Context Menus
+Noter started as a lightweight editor experiment and evolved into a **full developer workspace platform** focused on:
+
+- ⚡ Speed & smoothness
+- 🧠 Intelligent workflows
+- 🧩 Extensibility
+- 🎨 Modern UI/UX
+- 🛡️ Secure Electron architecture
+- 🚀 Developer productivity
+
+Unlike traditional editors, Noter focuses on making the entire coding experience feel:
+
+```txt
+Minimal friction
+Maximum flow
+```
+
+---
+
+# 🖼️ Preview
+
+## ⚙️ Settings System
+
+Modern VS Code-inspired settings architecture with live customization.
+
+<p align="center">
+  <img src="./assets/settings.png" width="95%">
+</p>
+
+---
+
+## 🧩 Extension Marketplace
+
+Integrated marketplace with install/uninstall support, categories, featured extensions, and GitHub-backed extension registry architecture.
+
+<p align="center">
+  <img src="./assets/marketplace.png" width="95%">
+</p>
+
+---
+
+## 📁 Workspace Explorer
 
 Advanced project explorer with:
 
-Right click actions
-Rename/Delete
-Open in terminal
-Workspace controls
-Auto-refresh system
+- Context menus
+- File operations
+- Workspace controls
+- Auto-refresh
+- Terminal integration
 
-🧠 IntelliSense System
+<p align="center">
+  <img src="./assets/explorer.png" width="95%">
+</p>
 
-Custom-built IntelliSense engine with:
+---
 
-Snippets
-Workspace indexing
-Smart completions
-Hover docs
-Cross-file suggestions
+## 🧠 IntelliSense Engine
 
-🔥 Core Features
-🪟 Window System
-Frameless custom window
-Rounded modern UI
-Custom minimize/maximize/close
-Native-feeling desktop interactions
-Smooth animations
-Glass-inspired dark theme
-Always-on-top support
-Draggable titlebar
-📂 Workspace System
-Open folders/projects
-Multi-workspace support
-Session restore
-Workspace persistence
-.noterworkspace support
-Recent workspaces
-Workspace auto-save
-Workspace state recovery
-📑 Multi Tab System
-VS Code-like tabs
-Drag & drop tab reordering
-Modified indicators
-Middle-click close
-Restore previous tabs
-Ctrl+Tab navigation
-Per-tab Monaco models
-Undo/redo history preservation
-🧠 IntelliSense Engine
+Custom-built IntelliSense system with:
 
-Custom-built intelligent coding system.
+- Smart snippets
+- Cross-file indexing
+- Hover docs
+- Workspace suggestions
+- Multi-language support
 
-Features
-Cross-file indexing
-Workspace symbol extraction
-Hover documentation
-Smart snippets
-Language-aware completions
-Context-aware suggestions
-Tailwind CSS IntelliSense
-React snippets
-STL snippets
-Python helpers
-Java/Spring suggestions
-Supported Languages
+<p align="center">
+  <img src="./assets/intellisense.png" width="95%">
+</p>
+
+---
+
+# 🔥 Core Features
+
+<table>
+<tr>
+<td width="50%">
+
+## 🪟 Modern Window System
+
+- Frameless UI
+- Custom titlebar
+- Rounded corners
+- Smooth animations
+- Glass-inspired dark theme
+- Native-feeling controls
+- Draggable window system
+
+</td>
+<td width="50%">
+
+## 📂 Workspace Engine
+
+- Open folders/projects
+- Workspace restore
+- Session persistence
+- Recent workspaces
+- `.noterworkspace` support
+- Smart workspace loading
+
+</td>
+</tr>
+
+<tr>
+<td width="50%">
+
+## 📑 Multi-Tab Architecture
+
+- VS Code-style tabs
+- Drag & drop reordering
+- Per-tab Monaco models
+- Undo/redo preservation
+- Middle-click close
+- Ctrl+Tab navigation
+
+</td>
+<td width="50%">
+
+## ⚡ Integrated Terminal
+
+- Multiple terminals
+- Persistent sessions
+- Smart cwd syncing
+- Terminal tabs
+- Async process handling
+- Output optimization
+
+</td>
+</tr>
+</table>
+
+---
+
+# 🧠 IntelliSense System
+
+Noter includes a custom-built intelligent coding engine powered by Monaco.
+
+## ✨ Features
+
+- Cross-file indexing
+- Workspace symbol extraction
+- Context-aware suggestions
+- Smart snippets
+- Hover documentation
+- Tailwind IntelliSense
+- React snippets
+- Python helpers
+- Java/Spring support
+- C/C++ STL support
+
+---
+
+## 🌐 Supported Languages
+
+```txt
 JavaScript
 TypeScript
-JSX / TSX
+React JSX / TSX
 Python
-C
-C++
+C / C++
 Java
 C#
 Go
 Rust
 PHP
 HTML
-CSS
-SCSS
+CSS / SCSS
 JSON
 YAML
 Markdown
 Shell
-🧩 Extension Marketplace
+```
+
+---
+
+# 🧩 Extension Marketplace
 
 Professional extension ecosystem inspired by VS Code Marketplace.
 
-Features
-Install/uninstall extensions
-Enable/disable extensions
-Featured extensions
-Categories
-Ratings/downloads
-Persistent extension storage
-GitHub-backed registry
-Marketplace search
-Official extension badges
-Extension detail pages
-Future-ready extension SDK architecture
-Included Official Extensions
-DSA Forge
-Theme Studio
-Git Insights
-React Snippets
-Python Power
-Error Lens
-Live Preview
-Prettier Pro
-Code Runner
-Electron Toolkit
-🖥️ Monaco Editor Enhancements
-Sticky scroll
-Bracket pair guides
-Auto-closing brackets
-Auto-closing quotes
-Multi-cursor support
-Smooth scrolling
-Font ligatures
-Minimap
-Folding controls
-Linked editing
-Indentation guides
-Word wrap
-Format on save
-Live cursor tracking
-Live word/line/char count
-📁 Explorer System
+## 🚀 Included Official Extensions
 
-Modern project explorer inspired by VS Code.
+| Extension        | Purpose                         |
+| ---------------- | ------------------------------- |
+| DSA Forge        | Competitive programming toolkit |
+| Theme Studio     | Theme customization engine      |
+| Git Insights     | Git visualization & history     |
+| React Snippets   | React productivity snippets     |
+| Python Power     | Python workflow tools           |
+| Error Lens       | Inline diagnostics              |
+| Live Preview     | Live frontend preview           |
+| Prettier Pro     | Code formatting                 |
+| Code Runner      | Multi-language execution        |
+| Electron Toolkit | Electron development tools      |
 
-Features
-Lazy folder loading
-Drag resize sidebar
-Auto-refresh
-File/folder context menus
-Rename/delete/create actions
-Reveal in explorer
-Open in terminal
-Explorer refresh preservation
-File icon system
-Active file highlighting
-Dotfile filtering
-🔍 Global Search
-Workspace-wide search
-Regex support
-Replace in files
-Incremental results
-Async search engine
-Indexed search architecture
-Non-blocking performance
-🧪 Command Palette
+---
 
-VS Code-style universal command system.
+# 🔍 Productivity Features
 
-Examples
-Quick Open
-Go To Line
-Toggle Zen Mode
-Format Document
-Rename Symbol
-Fold/Unfold
-Toggle Comments
-Reload Window
-Extension Commands
-🧘 Zen Mode
+## 🧪 Command Palette
 
-Distraction-free coding mode.
+```txt
+Ctrl + Shift + P
+```
 
-Hide sidebar
-Hide titlebar
-Hide statusbar
-Focus-only editor
-Escape-to-exit
-⚡ Integrated Terminal
-Multiple terminals
-Persistent sessions
-Split terminal architecture
-Smart cwd syncing
-Terminal tabs
-Output trimming system
-Async process handling
-⚙️ Settings System
+Quick access to:
 
-Powerful customizable settings architecture.
+- Commands
+- Navigation
+- Formatting
+- Workspace tools
+- Editor actions
 
-Categories
-Editor
-Terminal
-Appearance
-Extensions
-Keyboard
-Files
-Git
-Features
-Live search
-Toggle switches
-Persistent settings
-VS Code-like UX
-Real-time updates
-🛡️ Security Architecture
+---
 
-Professional Electron security model.
+## ⚡ Quick Open
 
+```txt
+Ctrl + P
+```
+
+Fast fuzzy search across:
+
+- Files
+- Tabs
+- Workspace symbols
+
+---
+
+## 🧘 Zen Mode
+
+```txt
+Alt + Z
+```
+
+Distraction-free coding environment.
+
+---
+
+## 🔎 Global Search
+
+```txt
+Ctrl + Shift + F
+```
+
+- Workspace-wide search
+- Regex support
+- Replace in files
+- Async indexing
+
+---
+
+# 🖥️ Explorer System
+
+Modern workspace explorer with:
+
+- Right-click context menus
+- Rename/delete/create
+- Reveal in system explorer
+- Open in terminal
+- File icon themes
+- Lazy folder loading
+- Auto-refresh
+- Active file highlighting
+
+---
+
+# ⚙️ Settings System
+
+Professional configurable settings architecture.
+
+## Categories
+
+- Editor
+- Terminal
+- Appearance
+- Extensions
+- Keyboard
+- Files
+- Git
+
+## Features
+
+- Live search
+- Persistent settings
+- Real-time updates
+- Toggle switches
+- VS Code-inspired UX
+
+---
+
+# 🛡️ Security Architecture
+
+Built with Electron security best practices.
+
+```js
 nodeIntegration: false
 contextIsolation: true
 secure preload bridge
 Content-Security-Policy enabled
-Additional Security
-Sandboxed extension architecture
-Safe IPC communication
-Async-only heavy operations
-Future extension isolation system
-🚀 Performance Optimizations
+```
 
-Noter is heavily optimized for smooth workflows.
+## Additional Protection
 
-Implemented
-Debounced workspace saves
-Async filesystem operations
-Worker-ready architecture
-Background indexing
-Smart model disposal preparation
-Debounced explorer refresh
-Lazy workspace loading
-Non-blocking search
-Cached workspace state
-Virtualization-ready architecture
-🧠 Future Vision
+- Secure IPC architecture
+- Sandboxed extension design
+- Async-only heavy operations
+- Future extension isolation system
 
-Noter is evolving into a complete developer platform.
+---
 
-Planned Features
-Full LSP ecosystem
-AI coding assistant
-Git visual tooling
-Dev containers
-Remote SSH
-Debugger platform
-Massive extension ecosystem
-Cloud sync
-Real-time collaboration
-AI-native workflows
-🧩 Tech Stack
-Technology Purpose
-Electron Desktop runtime
-Monaco Editor Code editor engine
-Node.js Backend runtime
-HTML/CSS/JS UI Layer
-fs/promises Async file operations
-GitHub Registry Marketplace backend
-📦 Installation
+# 🚀 Performance Optimizations
+
+Noter is optimized for smooth large-scale workflows.
+
+## Current Optimizations
+
+- Async filesystem operations
+- Debounced workspace saves
+- Background indexing
+- Lazy workspace loading
+- Explorer refresh optimization
+- Cached workspace state
+- Worker-ready architecture
+- Non-blocking search
+- Optimized Monaco rendering
+
+---
+
+# ⌨️ Keyboard Shortcuts
+
+| Shortcut         | Action                |
+| ---------------- | --------------------- |
+| Ctrl + N         | New File              |
+| Ctrl + T         | New Tab               |
+| Ctrl + O         | Open File             |
+| Ctrl + S         | Save                  |
+| Ctrl + Shift + S | Save As               |
+| Ctrl + P         | Quick Open            |
+| Ctrl + Shift + P | Command Palette       |
+| Ctrl + Shift + X | Extension Marketplace |
+| Ctrl + Shift + F | Global Search         |
+| Ctrl + J         | Toggle Terminal       |
+| Ctrl + B         | Toggle Sidebar        |
+| Ctrl + D         | Duplicate Line        |
+| Ctrl + G         | Go To Line            |
+| Alt + Z          | Zen Mode              |
+
+---
+
+# 🧩 Tech Stack
+
+| Technology      | Purpose               |
+| --------------- | --------------------- |
+| Electron        | Desktop runtime       |
+| Monaco Editor   | Code editor engine    |
+| Node.js         | Backend runtime       |
+| HTML/CSS/JS     | UI layer              |
+| fs/promises     | Async file operations |
+| GitHub Registry | Marketplace backend   |
+
+---
+
+# 📦 Installation
+
+## Clone Repository
+
+```bash
 git clone https://github.com/RaviKumar000987/desktop-noter.git
+```
 
-cd noter-app
+---
 
+## Install Dependencies
+
+```bash
 npm install
+```
 
-npm start
-🛠️ Development
+---
+
+## Run Development Mode
+
+```bash
 npm run dev
-🧪 Build
+```
+
+---
+
+## Build Application
+
+```bash
 npm run build
-⌨️ Keyboard Shortcuts
-Shortcut Action
-Ctrl+N New File
-Ctrl+T New Tab
-Ctrl+O Open File
-Ctrl+S Save
-Ctrl+Shift+S Save As
-Ctrl+P Quick Open
-Ctrl+Shift+P Command Palette
-Ctrl+Shift+X Extensions Marketplace
-Ctrl+Shift+F Global Search
-Ctrl+J Toggle Terminal
-Ctrl+B Toggle Sidebar
-Ctrl+D Duplicate Line
-Alt+Z Zen Mode
-Ctrl+G Go To Line
-📈 Current Status
-Current Phase
+```
+
+---
+
+# 🌌 Vision
+
+Noter is evolving into a complete modern developer platform.
+
+## Planned Future Features
+
+- Full LSP ecosystem
+- AI coding assistant
+- Git visual tooling
+- Dev containers
+- Remote SSH
+- Advanced debugger
+- Massive extension ecosystem
+- Cloud sync
+- AI-native workflows
+- Real-time collaboration
+
+---
+
+# 📈 Current Status
+
+```txt
 Advanced IDE Platform Development
-Progress
+```
+
+### Estimated Workflow Maturity
+
+```txt
 VS Code-level workflow architecture:
-~96-97%
-❤️ Philosophy
+~96–97%
+```
 
-Noter is being built with one core idea:
+---
 
-“Developers should spend less time fighting tools and more time building things.”
+# ❤️ Philosophy
 
-The focus is:
+> Developers should spend less time fighting tools and more time building things.
 
-Smoothness
-Productivity
-Minimal friction
-Modern workflows
-Developer happiness
-🤝 Contributing
+Noter is designed around:
+
+- Smoothness
+- Productivity
+- Low friction
+- Modern workflows
+- Developer happiness
+
+---
+
+# 🤝 Contributing
 
 Contributions, ideas, architecture discussions, and feedback are welcome.
 
 Future goals include:
 
-Extension SDK
-Theme ecosystem
-AI APIs
-Community marketplace
-Cross-platform optimization
+- Extension SDK
+- Theme ecosystem
+- AI APIs
+- Community marketplace
+- Cross-platform optimization
 
-📜 License
+---
+
+# 📜 License
+
 MIT License
 
-🌌 Final Note
-Noter is no longer just a text editor.
-It is becoming a modern developer workspace designed for the next generation of coding workflows. 🚀
+---
+
+<div align="center">
+
+# 🚀 Noter
+
+### More than a text editor.
+
+### A modern developer workspace platform.
+
+</div>
