@@ -10,6 +10,7 @@
     <title>Noter App</title>
     <link rel="stylesheet" href="./style.css" />
     <link rel="stylesheet" href="./features.css" />
+    <link rel="stylesheet" href="./marketplace.css" />
   </head>
   <body>
 
@@ -153,6 +154,18 @@
         </div>
       </div>
 
+      <!-- Extensions -->
+      <div class="menu-item">
+        Extensions
+        <div class="dropdown">
+          <div class="menu-option" id="openMarketplace">
+            Extension Marketplace <span class="shortcut">Ctrl+⇧+X</span>
+          </div>
+          <div class="separator"></div>
+          <div class="menu-option" id="manageExtensions">Manage Installed</div>
+        </div>
+      </div>
+
       <!-- Help -->
       <div class="menu-item">
         Help
@@ -225,6 +238,9 @@
       <!-- ── Editor area ───────────────────────── -->
       <div id="editor-area">
 
+        <!-- Breadcrumb navigation bar -->
+        <div id="breadcrumb" aria-label="File path breadcrumb"></div>
+
         <!-- editor-wrapper holds main editor + optional split pane -->
         <div id="editor-wrapper">
           <div id="editor"></div>
@@ -281,5 +297,7 @@
     <script src="./split-editor.js"></script>
     <script src="./global-search.js"></script>
     <script src="./command-palette.js"></script>
+    <script src="./marketplace.js"></script>
+    <script src="./context-menu.js"></script>
   </body>
 </html>

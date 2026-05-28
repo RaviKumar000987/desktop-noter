@@ -1,9 +1,40 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
-const fs   = require("fs");
-const path = require("node:path");
+const fs     = require("fs");
+const path   = require("node:path");
+const https  = require("https");
 const { exec } = require("child_process");
-const os   = require("os");
+const os     = require("os");
 let mainWindow;
+
+// ─── Extension Marketplace helpers ───────────────────────────────────────────
+function getExtensionsDir() {
+  let base;
+  if (process.platform === "win32") {
+    base = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  } else if (process.platform === "darwin") {
+    base = path.join(os.homedir(), "Library", "Application Support");
+  } else {
+    base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  }
+  return path.join(base, "Noter", "extensions");
+}
+
+function ensureExtDir() {
+  const dir = getExtensionsDir();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function readInstalledRegistry() {
+  const p = path.join(getExtensionsDir(), "installed.json");
+  try { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf-8")) : {}; }
+  catch { return {}; }
+}
+
+function writeInstalledRegistry(data) {
+  const dir = ensureExtDir();
+  fs.writeFileSync(path.join(dir, "installed.json"), JSON.stringify(data, null, 2), "utf-8");
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -305,6 +336,208 @@ ipcMain.handle("create-project-structure", async (e, { folderPath, files, setupC
   }
 
   return result;
+});
+
+// ─── Extension Marketplace IPC ───────────────────────────────────────────────
+
+// Fetch live registry from GitHub (falls back in renderer if this returns null)
+ipcMain.handle("marketplace-fetch-registry", () => {
+  const REGISTRY_URL = "https://raw.githubusercontent.com/noter-app/marketplace/main/marketplace.json";
+  return new Promise((resolve) => {
+    https.get(REGISTRY_URL, { timeout: 5000 }, (res) => {
+      if (res.statusCode !== 200) { res.resume(); return resolve(null); }
+      let data = "";
+      res.on("data", chunk => { data += chunk; });
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); }
+        catch { resolve(null); }
+      });
+    }).on("error", () => resolve(null))
+      .on("timeout", function() { this.destroy(); resolve(null); });
+  });
+});
+
+ipcMain.handle("marketplace-get-installed", () => readInstalledRegistry());
+
+ipcMain.handle("marketplace-install", (e, meta) => {
+  try {
+    const installed = readInstalledRegistry();
+    installed[meta.id] = { ...meta, enabled: true, installedAt: new Date().toISOString() };
+    writeInstalledRegistry(installed);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle("marketplace-uninstall", (e, id) => {
+  try {
+    const installed = readInstalledRegistry();
+    delete installed[id];
+    writeInstalledRegistry(installed);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle("marketplace-toggle", (e, { id, enabled }) => {
+  try {
+    const installed = readInstalledRegistry();
+    if (installed[id]) { installed[id].enabled = enabled; writeInstalledRegistry(installed); }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle("marketplace-get-settings", () => {
+  const defaults = { autoUpdate: true, showRecommendations: true, installedFirst: false, checkUpdatesOnStartup: true };
+  try {
+    const p = path.join(getExtensionsDir(), "settings.json");
+    if (fs.existsSync(p)) return { ...defaults, ...JSON.parse(fs.readFileSync(p, "utf-8")) };
+  } catch { /* use defaults */ }
+  return defaults;
+});
+
+ipcMain.handle("marketplace-save-settings", (e, settings) => {
+  try {
+    const dir = ensureExtDir();
+    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify(settings, null, 2), "utf-8");
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// ─── File System Operations ───────────────────────────────────────────────────
+
+ipcMain.handle("fs-rename", async (e, oldPath, newPath) => {
+  try {
+    await fs.promises.rename(oldPath, newPath);
+    return true;
+  } catch { return false; }
+});
+
+ipcMain.handle("fs-delete", async (e, filePath) => {
+  try {
+    await shell.trashItem(filePath);
+    return true;
+  } catch {
+    // Fallback for items that can't be trashed
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) {
+        fs.rmSync(filePath, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(filePath);
+      }
+      return true;
+    } catch { return false; }
+  }
+});
+
+ipcMain.handle("fs-new-file", async (e, dirPath, name) => {
+  try {
+    const filePath = path.join(dirPath, name);
+    if (fs.existsSync(filePath)) return false;
+    fs.writeFileSync(filePath, "", "utf8");
+    return filePath;
+  } catch { return false; }
+});
+
+ipcMain.handle("fs-new-folder", async (e, dirPath, name) => {
+  try {
+    const folderPath = path.join(dirPath, name);
+    if (fs.existsSync(folderPath)) return false;
+    fs.mkdirSync(folderPath, { recursive: true });
+    return true;
+  } catch { return false; }
+});
+
+ipcMain.handle("fs-duplicate", async (e, srcPath, destPath) => {
+  try {
+    // Find a unique destination path
+    let finalDest = destPath;
+    let counter = 1;
+    while (fs.existsSync(finalDest)) {
+      const ext = path.extname(destPath);
+      const base = destPath.slice(0, -ext.length || undefined);
+      finalDest = `${base} (${counter})${ext}`;
+      counter++;
+    }
+    fs.copyFileSync(srcPath, finalDest);
+    return path.basename(finalDest);
+  } catch { return false; }
+});
+
+ipcMain.handle("shell-reveal", async (e, filePath) => {
+  shell.showItemInFolder(filePath);
+});
+
+// ─── File Watcher ─────────────────────────────────────────────────────────────
+const fileWatchers = new Map();
+const watchDebounce = new Map();
+
+ipcMain.handle("watch-file", (e, filePath) => {
+  if (fileWatchers.has(filePath)) return;
+  try {
+    const watcher = fs.watch(filePath, (eventType) => {
+      if (eventType !== "change") return;
+      // Debounce to avoid duplicate events
+      clearTimeout(watchDebounce.get(filePath));
+      watchDebounce.set(filePath, setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("file-externally-changed", filePath);
+        }
+      }, 400));
+    });
+    fileWatchers.set(filePath, watcher);
+  } catch { /* non-watchable files are fine */ }
+});
+
+ipcMain.handle("unwatch-file", (e, filePath) => {
+  const w = fileWatchers.get(filePath);
+  if (w) { w.close(); fileWatchers.delete(filePath); }
+  clearTimeout(watchDebounce.get(filePath));
+  watchDebounce.delete(filePath);
+});
+
+// ─── Workspace Files Listing (for Quick Open / Ctrl+P) ───────────────────────
+ipcMain.handle("list-workspace-files", async (e, rootPath) => {
+  if (!rootPath) return [];
+  const SKIP_DIRS = new Set(["node_modules",".git","dist","build",".next","out","coverage",".cache","__pycache__","venv",".venv","target"]);
+  const TEXT_EXTS = new Set([
+    "txt","js","mjs","cjs","ts","jsx","tsx","html","htm","css","scss","less",
+    "json","jsonc","md","markdown","py","rb","php","java","c","h","cpp","cc",
+    "cs","go","rs","sh","bash","xml","svg","yaml","yml","sql","env","toml",
+    "ini","cfg","conf","lock","gitignore","editorconfig","prettierrc","eslintrc",
+  ]);
+  const files = [];
+
+  async function walk(dir, depth) {
+    if (depth > 10 || files.length >= 2000) return;
+    try {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (files.length >= 2000) break;
+        if (entry.name.startsWith(".") && entry.name !== ".env" && entry.name !== ".gitignore") continue;
+        if (SKIP_DIRS.has(entry.name)) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full, depth + 1);
+        } else {
+          const ext = (entry.name.split(".").pop() || "").toLowerCase();
+          if (TEXT_EXTS.has(ext) || !entry.name.includes(".")) {
+            files.push(full);
+          }
+        }
+      }
+    } catch { /* skip unreadable */ }
+  }
+
+  await walk(rootPath, 0);
+  return files;
 });
 
 // ─── Global Search ────────────────────────────────────────────────────────────

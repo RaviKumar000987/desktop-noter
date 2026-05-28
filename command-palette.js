@@ -74,6 +74,76 @@ const CommandPalette = (() => {
       shortcut: "Ctrl+Shift+F",
       fn: () => GlobalSearch.show(),
     },
+    {
+      label: "Quick Open File…",
+      shortcut: "Ctrl+P",
+      fn: () => QuickOpen.show(),
+    },
+    {
+      label: "Go to Line…",
+      shortcut: "Ctrl+G",
+      fn: () => window.editor?.trigger("kbd", "editor.action.gotoLine", null),
+    },
+    {
+      label: "Toggle Zen Mode",
+      shortcut: "Alt+Z",
+      fn: () => toggleZenMode(),
+    },
+    {
+      label: "Format Document",
+      shortcut: "Alt+Shift+F",
+      fn: () => window.editor?.trigger("kbd", "editor.action.formatDocument", null),
+    },
+    {
+      label: "Rename Symbol",
+      shortcut: "F2",
+      fn: () => window.editor?.trigger("kbd", "editor.action.rename", null),
+    },
+    {
+      label: "Go to Definition",
+      shortcut: "F12",
+      fn: () => window.editor?.trigger("kbd", "editor.action.revealDefinition", null),
+    },
+    {
+      label: "Toggle Line Comment",
+      shortcut: "Ctrl+/",
+      fn: () => window.editor?.trigger("kbd", "editor.action.commentLine", null),
+    },
+    {
+      label: "Toggle Block Comment",
+      shortcut: "Ctrl+Shift+A",
+      fn: () => window.editor?.trigger("kbd", "editor.action.blockComment", null),
+    },
+    {
+      label: "Fold All",
+      shortcut: "",
+      fn: () => window.editor?.trigger("kbd", "editor.foldAll", null),
+    },
+    {
+      label: "Unfold All",
+      shortcut: "",
+      fn: () => window.editor?.trigger("kbd", "editor.unfoldAll", null),
+    },
+    {
+      label: "Select All Occurrences",
+      shortcut: "Ctrl+Shift+L",
+      fn: () => window.editor?.trigger("kbd", "editor.action.selectHighlights", null),
+    },
+    {
+      label: "Add Cursor Above",
+      shortcut: "Ctrl+Alt+Up",
+      fn: () => window.editor?.trigger("kbd", "editor.action.insertCursorAbove", null),
+    },
+    {
+      label: "Add Cursor Below",
+      shortcut: "Ctrl+Alt+Down",
+      fn: () => window.editor?.trigger("kbd", "editor.action.insertCursorBelow", null),
+    },
+    {
+      label: "Close All Tabs",
+      shortcut: "",
+      fn: () => TabManager.closeAll(),
+    },
     { label: "Quit", shortcut: "", fn: () => window.electronAPI.quit() },
   ];
 

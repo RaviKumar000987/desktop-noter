@@ -11,6 +11,7 @@ let editorFontSize   = 18;
 let wordWrapEnabled  = true;
 let sidebarVisible   = true;
 let sidebarWidth     = 220;
+let zenModeActive    = false;
 
 // ─── Utility ────────────────────────────────────────────────────
 function basename(p) {
@@ -164,9 +165,11 @@ const TabManager = {
 
     updateStatusBar();
     updateTitleBar();
+    updateBreadcrumb();
     renderTabs();
     updateExplorerActiveFile();
     saveSessionState();
+    if (typeof SplitEditor !== "undefined") SplitEditor.syncWithTab(tab);
   },
 
   /** Close a tab (prompts if unsaved). Returns true if closed. */
@@ -179,6 +182,7 @@ const TabManager = {
     }
 
     const idx = this.tabs.findIndex(t => t.id === id);
+    if (tab.filePath) window.electronAPI?.unwatchFile?.(tab.filePath);
     tab.model.dispose();
     this.tabs.splice(idx, 1);
 
@@ -204,6 +208,101 @@ const TabManager = {
     for (const id of ids) this.close(id, force);
   },
 };
+
+// ═══════════════════════════════════════════════════════════════
+//  DRAG & DROP TAB REORDERING
+// ═══════════════════════════════════════════════════════════════
+const TabDnD = (() => {
+  let dragTabId = null;
+  let indicatorEl = null;
+
+  function getIndicator() {
+    if (!indicatorEl) {
+      indicatorEl = document.createElement("div");
+      indicatorEl.id = "tab-drop-indicator";
+      document.body.appendChild(indicatorEl);
+    }
+    return indicatorEl;
+  }
+
+  function clearIndicator() {
+    const el = document.getElementById("tab-drop-indicator");
+    if (el) el.style.display = "none";
+  }
+
+  function getTabEl(e) {
+    return e.target.closest(".tab-item[data-id]");
+  }
+
+  function onDragStart(e) {
+    const el = getTabEl(e);
+    if (!el) return;
+    dragTabId = el.dataset.id;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", dragTabId);
+    // Fade source tab while dragging
+    setTimeout(() => { el.style.opacity = "0.45"; }, 0);
+  }
+
+  function onDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const el = getTabEl(e);
+    if (!el || el.dataset.id === dragTabId) { clearIndicator(); return; }
+
+    const rect = el.getBoundingClientRect();
+    const mid  = rect.left + rect.width / 2;
+    const pos  = e.clientX < mid ? "before" : "after";
+
+    el.dataset.dropPos = pos;
+    const ind = getIndicator();
+    ind.style.display = "block";
+    ind.style.left    = (pos === "before" ? rect.left : rect.right) - 1 + "px";
+    ind.style.top     = rect.top + "px";
+    ind.style.height  = rect.height + "px";
+  }
+
+  function onDragLeave(e) {
+    const el = getTabEl(e);
+    if (el) delete el.dataset.dropPos;
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    clearIndicator();
+    const el = getTabEl(e);
+    if (!el || !dragTabId || el.dataset.id === dragTabId) return;
+
+    const targetId = el.dataset.id;
+    const dropPos  = el.dataset.dropPos || "after";
+    delete el.dataset.dropPos;
+
+    const fromIdx = TabManager.tabs.findIndex(t => t.id === dragTabId);
+    if (fromIdx === -1) return;
+
+    const [moved] = TabManager.tabs.splice(fromIdx, 1);
+    let toIdx = TabManager.tabs.findIndex(t => t.id === targetId);
+    if (toIdx === -1) { TabManager.tabs.push(moved); }
+    else {
+      const insertAt = dropPos === "before" ? toIdx : toIdx + 1;
+      TabManager.tabs.splice(insertAt, 0, moved);
+    }
+
+    renderTabs();
+    saveSessionState();
+  }
+
+  function onDragEnd(e) {
+    clearIndicator();
+    dragTabId = null;
+    document.querySelectorAll(".tab-item").forEach(el => {
+      el.style.opacity = "";
+      delete el.dataset.dropPos;
+    });
+  }
+
+  return { onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd };
+})();
 
 // ═══════════════════════════════════════════════════════════════
 //  RENDER TABS
@@ -248,6 +347,14 @@ function renderTabs() {
     el.addEventListener("mousedown", (e) => {
       if (e.button === 1) { e.preventDefault(); TabManager.close(tab.id); }
     });
+
+    // Drag & Drop reordering
+    el.draggable = true;
+    el.addEventListener("dragstart",  TabDnD.onDragStart);
+    el.addEventListener("dragover",   TabDnD.onDragOver);
+    el.addEventListener("dragleave",  TabDnD.onDragLeave);
+    el.addEventListener("drop",       TabDnD.onDrop);
+    el.addEventListener("dragend",    TabDnD.onDragEnd);
 
     list.appendChild(el);
   });
@@ -305,6 +412,226 @@ function updateTitleBar() {
   if (titleEl) titleEl.textContent = name + " — Noter";
   if (dotEl)   dotEl.style.display = modified ? "inline" : "none";
 }
+
+// ── Breadcrumb navigation ─────────────────────────────────────
+function updateBreadcrumb() {
+  const crumb = document.getElementById("breadcrumb");
+  if (!crumb) return;
+  const tab = TabManager.getActive();
+  if (!tab || !tab.filePath) {
+    crumb.innerHTML = `<span class="crumb-item crumb-active">Untitled</span>`;
+    return;
+  }
+
+  const fp     = tab.filePath.replace(/\\/g, "/");
+  const root   = (explorerState.rootPath || "").replace(/\\/g, "/");
+  const parts  = fp.split("/").filter(Boolean);
+
+  let displayParts;
+  if (root && fp.startsWith(root)) {
+    const rootParts = root.split("/").filter(Boolean);
+    displayParts = [
+      { label: rootParts[rootParts.length - 1] || root, isRoot: true },
+      ...parts.slice(rootParts.length).map((p, i, arr) => ({
+        label: p,
+        isLast: i === arr.length - 1,
+      })),
+    ];
+  } else {
+    displayParts = parts.map((p, i) => ({ label: p, isLast: i === parts.length - 1 }));
+  }
+
+  crumb.innerHTML = displayParts.map((p, i) => {
+    const cls = p.isLast ? "crumb-item crumb-active" : "crumb-item";
+    const sep = i < displayParts.length - 1 ? `<span class="crumb-sep">›</span>` : "";
+    return `<span class="${cls}">${p.label}</span>${sep}`;
+  }).join("");
+}
+
+// ── Zen Mode ──────────────────────────────────────────────────
+function toggleZenMode(force) {
+  zenModeActive = force !== undefined ? force : !zenModeActive;
+  document.body.classList.toggle("zen-mode", zenModeActive);
+  if (zenModeActive) {
+    showToast("Zen Mode — press Escape or Alt+Z to exit", "info", 2800);
+  }
+  setTimeout(() => window.editor?.layout(), 60);
+}
+
+// ── Quick Open palette (Ctrl+P) ───────────────────────────────
+const QuickOpen = (() => {
+  let visible    = false;
+  let wsFiles    = [];
+  let wsFilesTs  = 0;
+  let selIdx     = 0;
+  let filtered   = [];
+  const CACHE_MS = 8000;
+
+  function ensureOverlay() {
+    if (document.getElementById("qo-overlay")) return;
+    const overlay = document.createElement("div");
+    overlay.id = "qo-overlay";
+    overlay.innerHTML = `
+      <div id="qo-box">
+        <div id="qo-header">
+          <span>Quick Open</span>
+          <kbd>Esc to close</kbd>
+        </div>
+        <input id="qo-input" type="text" placeholder="Search files by name…"
+               autocomplete="off" spellcheck="false"/>
+        <div id="qo-list"></div>
+      </div>`;
+    overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) hide(); });
+    document.body.appendChild(overlay);
+    document.getElementById("qo-input").addEventListener("input", filterList);
+    document.getElementById("qo-input").addEventListener("keydown", onKey);
+  }
+
+  async function getFiles() {
+    const now = Date.now();
+    if (now - wsFilesTs < CACHE_MS) return wsFiles;
+    wsFilesTs = now;
+    wsFiles = [];
+    if (explorerState.rootPath && window.electronAPI.listWorkspaceFiles) {
+      wsFiles = await window.electronAPI.listWorkspaceFiles(explorerState.rootPath).catch(() => []);
+    }
+    return wsFiles;
+  }
+
+  function buildItems(files) {
+    const openPaths = new Set(TabManager.tabs.map(t => t.filePath).filter(Boolean));
+
+    // Open tabs first
+    const tabItems = TabManager.tabs.map(t => ({
+      label:     t.title,
+      subLabel:  t.filePath || "",
+      isTab:     true,
+      modified:  t.isModified,
+      action:    () => TabManager.activate(t.id),
+    }));
+
+    // Workspace files that aren't already open
+    const wsItems = files
+      .filter(f => !openPaths.has(f))
+      .map(f => ({
+        label:    basename(f),
+        subLabel: f,
+        isTab:    false,
+        action:   () => openFileFromExplorer(f),
+      }));
+
+    return [...tabItems, ...wsItems];
+  }
+
+  async function filterList() {
+    const q     = (document.getElementById("qo-input")?.value || "").trim().toLowerCase();
+    const files = await getFiles();
+    const all   = buildItems(files);
+
+    filtered = q
+      ? all.filter(it => it.label.toLowerCase().includes(q) || it.subLabel.toLowerCase().includes(q))
+      : all;
+    selIdx = 0;
+    render();
+  }
+
+  function render() {
+    const list = document.getElementById("qo-list");
+    if (!list) return;
+    list.innerHTML = "";
+
+    if (filtered.length === 0) {
+      list.innerHTML = `<div class="qo-empty">No files found</div>`;
+      return;
+    }
+
+    filtered.forEach((item, i) => {
+      const el = document.createElement("div");
+      el.className = "qo-item" + (i === selIdx ? " qo-sel" : "");
+      const dot = item.modified ? `<span class="qo-modified">●</span>` : "";
+      el.innerHTML =
+        `<span class="qo-label">${dot}${item.label}</span>` +
+        (item.subLabel ? `<span class="qo-path">${item.subLabel}</span>` : "");
+      el.addEventListener("mousedown", (e) => { e.preventDefault(); run(i); });
+      el.addEventListener("mouseover", () => { selIdx = i; render(); });
+      list.appendChild(el);
+    });
+
+    const sel = list.querySelector(".qo-sel");
+    if (sel) sel.scrollIntoView({ block: "nearest" });
+  }
+
+  function onKey(e) {
+    if (e.key === "Escape") { e.preventDefault(); hide(); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); selIdx = Math.min(selIdx + 1, filtered.length - 1); render(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); selIdx = Math.max(selIdx - 1, 0); render(); }
+    else if (e.key === "Enter") { e.preventDefault(); run(selIdx); }
+  }
+
+  function run(i) {
+    const item = filtered[i];
+    if (!item) return;
+    hide();
+    setTimeout(() => { item.action(); }, 30);
+  }
+
+  async function show() {
+    ensureOverlay();
+    const overlay = document.getElementById("qo-overlay");
+    const input   = document.getElementById("qo-input");
+    overlay.classList.add("qo-visible");
+    visible = true;
+    input.value = "";
+    selIdx = 0;
+
+    // Start fetching files in background then render open tabs immediately
+    filtered = buildItems([]);
+    render();
+    input.focus();
+
+    // Then update with workspace files
+    const files = await getFiles();
+    if (visible) {
+      await filterList();
+    }
+  }
+
+  function hide() {
+    visible = false;
+    document.getElementById("qo-overlay")?.classList.remove("qo-visible");
+    window.editor?.focus();
+  }
+
+  function toggle() {
+    const overlay = document.getElementById("qo-overlay");
+    overlay?.classList.contains("qo-visible") ? hide() : show();
+  }
+
+  return { show, hide, toggle };
+})();
+
+// ── File change watcher listener ──────────────────────────────
+window.electronAPI?.onFileExternalChange?.((filePath) => {
+  const tab = TabManager.tabs.find(t => t.filePath === filePath);
+  if (!tab) return;
+
+  const name = basename(filePath);
+  const isActive = tab.id === TabManager.activeId;
+
+  if (!tab.isModified) {
+    // Auto-reload if no unsaved changes
+    window.electronAPI.openFileByPath(filePath).then(file => {
+      if (!file) return;
+      tab.model.setValue(file.content);
+      tab.isModified = false;
+      if (isActive) { renderTabs(); updateTitleBar(); updateCounts(); }
+      showToast(`${name} reloaded (changed on disk)`, "info", 2200);
+    });
+  } else {
+    // Has unsaved changes — show a persistent notification
+    showToast(`${name} changed on disk (has unsaved edits — save to keep yours)`, "info", 5000);
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════
 //  SIDEBAR / EXPLORER
@@ -464,6 +791,7 @@ async function openFileFromExplorer(filePath) {
   const tab  = TabManager.create(filePath, file.content, lang);
   TabManager.activate(tab.id);
   addToRecentFiles(filePath);
+  window.electronAPI?.watchFile?.(filePath);
 }
 
 function updateExplorerActiveFile() {
@@ -578,6 +906,7 @@ async function openFileByPath(fp) {
   const tab  = TabManager.create(fp, file.content, lang);
   TabManager.activate(tab.id);
   addToRecentFiles(fp);
+  window.electronAPI?.watchFile?.(fp);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1220,6 +1549,16 @@ document.getElementById("toggleSplitMenu")    .addEventListener("click", () => {
 document.getElementById("commandPaletteMenu") .addEventListener("click", () => { CommandPalette.show();    closeAllMenus(); });
 document.getElementById("globalSearchMenu")   .addEventListener("click", () => { GlobalSearch.show();      closeAllMenus(); });
 
+// ── Extensions ──────────────────────────────────────────────────
+document.getElementById("openMarketplace").addEventListener("click", () => {
+  Marketplace.open();
+  closeAllMenus();
+});
+document.getElementById("manageExtensions").addEventListener("click", () => {
+  Marketplace.open();
+  closeAllMenus();
+});
+
 // ── Help ────────────────────────────────────────────────────────
 document.getElementById("documentation").addEventListener("click", () => {
   window.electronAPI.openExternal("https://github.com/RaviKumar000987/desktop-noter");
@@ -1318,6 +1657,11 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     actions.openFile();
   }
+  // Ctrl+Shift+X → Extension Marketplace
+  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "x") {
+    e.preventDefault();
+    if (typeof Marketplace !== "undefined") Marketplace.toggle();
+  }
   // Ctrl+Shift+S → save as  (check BEFORE plain S)
   if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "s") {
     e.preventDefault(); actions.saveAsFile();
@@ -1337,6 +1681,20 @@ document.addEventListener("keydown", (e) => {
     const idx  = TabManager.tabs.findIndex(t => t.id === TabManager.activeId);
     const prev = TabManager.tabs[(idx - 1 + TabManager.tabs.length) % TabManager.tabs.length];
     if (prev) TabManager.activate(prev.id);
+  }
+  // Ctrl+P → quick file open
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === "p") {
+    e.preventDefault();
+    QuickOpen.toggle();
+  }
+  // Alt+Z → zen mode
+  if (e.altKey && !e.ctrlKey && e.key === "z") {
+    e.preventDefault();
+    toggleZenMode();
+  }
+  // Escape exits zen mode
+  if (e.key === "Escape" && zenModeActive) {
+    toggleZenMode(false);
   }
 });
 
@@ -1441,21 +1799,80 @@ require(["vs/editor/editor.main"], async () => {
 
   // ── Create editor (no model yet — tabs will supply models) ──
   window.editor = monaco.editor.create(document.getElementById("editor"), {
-    model:         null,            // start modelless; first tab sets it
+    model:         null,
     theme:         "catppuccin-mocha",
     automaticLayout: true,
     fontSize:        editorFontSize,
     fontFamily:      "'Dank Mono','Cascadia Code','Fira Code',Consolas,'Courier New',monospace",
     lineHeight:      38,
     padding:         { top: 20, bottom: 20 },
-    minimap:         { enabled: true },
+
+    // Minimap
+    minimap:         { enabled: true, autohide: true, renderCharacters: false, scale: 1 },
+
+    // Wrapping & scrolling
     wordWrap:        wordWrapEnabled ? "on" : "off",
     smoothScrolling: true,
-    overviewRulerBorder: false,
-    renderLineHighlight: "all",
-    cursorBlinking:  "smooth",
+
+    // Cursor
+    cursorBlinking:             "smooth",
     cursorSmoothCaretAnimation: "on",
-    roundedSelection: true,
+    cursorWidth:                2,
+
+    // Selection & highlights
+    roundedSelection:              true,
+    renderLineHighlight:           "all",
+    overviewRulerBorder:           false,
+    occurrencesHighlight:          "singleFile",
+
+    // Brackets & pairs
+    matchBrackets:                 "always",
+    bracketPairColorization:       { enabled: true, independentColorPoolPerBracketType: true },
+    autoClosingBrackets:           "languageDefined",
+    autoClosingQuotes:             "languageDefined",
+    autoClosingDelete:             "always",
+    autoSurround:                  "languageDefined",
+
+    // Indentation guides
+    guides: { bracketPairs: true, bracketPairsHorizontal: true, indentation: true, highlightActiveIndentation: true },
+
+    // Folding
+    folding:             true,
+    foldingHighlight:    true,
+    showFoldingControls: "mouseover",
+    foldingStrategy:     "auto",
+
+    // Sticky scroll (shows current scope at top like VS Code)
+    stickyScroll: { enabled: true, maxLineCount: 5 },
+
+    // Auto-indent
+    autoIndent: "full",
+
+    // Multi-cursor
+    multiCursorModifier: "ctrlCmd",
+
+    // Suggestions & intellisense
+    quickSuggestions:          { other: true, comments: false, strings: false },
+    suggestOnTriggerCharacters: true,
+    tabCompletion:              "on",
+    parameterHints:             { enabled: true, cycle: true },
+
+    // Render settings
+    renderWhitespace:    "selection",
+    fontLigatures:       true,
+    letterSpacing:       0.3,
+    lineNumbers:         "on",
+    lineDecorationsWidth: 6,
+
+    // Scrollbar
+    scrollbar: {
+      verticalScrollbarSize:   8,
+      horizontalScrollbarSize: 8,
+      useShadows:              false,
+    },
+
+    // Accessibility
+    accessibilitySupport: "off",
   });
 
   // ── Register shortcuts inside Monaco ────────────────────────
@@ -1475,6 +1892,18 @@ require(["vs/editor/editor.main"], async () => {
     () => actions.duplicateLine());
   window.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB,
     () => toggleSidebar());
+  // Ctrl+G → go to line (Monaco built-in)
+  window.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyG,
+    () => window.editor.trigger("kbd", "editor.action.gotoLine", null));
+  // Ctrl+P → quick file open
+  window.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP,
+    () => QuickOpen.toggle());
+  // Alt+Z → zen mode
+  window.editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.KeyZ,
+    () => toggleZenMode());
+  // Ctrl+Shift+Z → zen mode (alternative)
+  window.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyZ,
+    () => toggleZenMode());
 
   // Tab navigation inside Monaco
   window.editor.addCommand(
@@ -1519,10 +1948,17 @@ require(["vs/editor/editor.main"], async () => {
   updateWrapStatus();
   updateStatusBar();
   updateTitleBar();
+  updateBreadcrumb();
   updateCounts();
   renderRecentFiles();
 
   window.editor.focus();
+
+  // Ctrl+Shift+X → Extension Marketplace
+  window.editor.addCommand(
+    monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyX,
+    () => { if (typeof Marketplace !== "undefined") Marketplace.toggle(); }
+  );
 
   // Notify feature modules that Monaco is ready so they can register addCommand shortcuts
   document.dispatchEvent(new CustomEvent("monaco-ready"));
