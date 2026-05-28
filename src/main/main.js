@@ -1,14 +1,18 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
-const fs     = require("fs");
-const path   = require("node:path");
-const https  = require("https");
+const fs = require("fs");
+const path = require("node:path");
+const https = require("https");
 const { exec, spawn } = require("child_process");
-const os     = require("os");
+const os = require("os");
 let mainWindow;
 
 // ─── node-pty (optional) ─────────────────────────────────────────────────────
 let nodePty = null;
-try { nodePty = require("node-pty"); } catch { /* use spawn fallback */ }
+try {
+  nodePty = require("node-pty");
+} catch {
+  /* use spawn fallback */
+}
 
 // ─── PTY process state ───────────────────────────────────────────────────────
 let ptyProcess = null;
@@ -17,9 +21,11 @@ function getShellConfig() {
   if (process.platform === "win32") {
     const psPath = path.join(
       process.env.SYSTEMROOT || "C:\\Windows",
-      "System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      "System32\\WindowsPowerShell\\v1.0\\powershell.exe",
     );
-    const shell = fs.existsSync(psPath) ? psPath : (process.env.COMSPEC || "cmd.exe");
+    const shell = fs.existsSync(psPath)
+      ? psPath
+      : process.env.COMSPEC || "cmd.exe";
     const isPowerShell = shell.toLowerCase().includes("powershell");
     return {
       shell,
@@ -27,7 +33,9 @@ function getShellConfig() {
       env: { ...process.env, TERM: "xterm-256color" },
     };
   }
-  const shell = process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
+  const shell =
+    process.env.SHELL ||
+    (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
   return {
     shell,
     args: [],
@@ -56,13 +64,20 @@ function ensureExtDir() {
 
 function readInstalledRegistry() {
   const p = path.join(getExtensionsDir(), "installed.json");
-  try { return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf-8")) : {}; }
-  catch { return {}; }
+  try {
+    return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf-8")) : {};
+  } catch {
+    return {};
+  }
 }
 
 function writeInstalledRegistry(data) {
   const dir = ensureExtDir();
-  fs.writeFileSync(path.join(dir, "installed.json"), JSON.stringify(data, null, 2), "utf-8");
+  fs.writeFileSync(
+    path.join(dir, "installed.json"),
+    JSON.stringify(data, null, 2),
+    "utf-8",
+  );
 }
 
 function createWindow() {
@@ -87,7 +102,9 @@ function createWindow() {
       try {
         if (nodePty && ptyProcess.kill) ptyProcess.kill();
         else ptyProcess.kill?.("SIGTERM");
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       ptyProcess = null;
     }
   });
@@ -120,16 +137,52 @@ const FILE_FILTERS = [
   {
     name: "All Supported Files",
     extensions: [
-      "txt","js","mjs","ts","jsx","tsx","html","htm","css","scss","less",
-      "json","jsonc","md","markdown","py","rb","php","java","c","h","cpp",
-      "cc","cs","go","rs","sh","bash","xml","svg","yaml","yml","sql",
+      "txt",
+      "js",
+      "mjs",
+      "ts",
+      "jsx",
+      "tsx",
+      "html",
+      "htm",
+      "css",
+      "scss",
+      "less",
+      "json",
+      "jsonc",
+      "md",
+      "markdown",
+      "py",
+      "rb",
+      "php",
+      "java",
+      "c",
+      "h",
+      "cpp",
+      "cc",
+      "cs",
+      "go",
+      "rs",
+      "sh",
+      "bash",
+      "xml",
+      "svg",
+      "yaml",
+      "yml",
+      "sql",
     ],
   },
   { name: "Text Files", extensions: ["txt"] },
-  { name: "JavaScript / TypeScript", extensions: ["js","ts","jsx","tsx","mjs"] },
-  { name: "Web Files", extensions: ["html","htm","css","scss","less"] },
-  { name: "Data / Config", extensions: ["json","jsonc","xml","yaml","yml","sql"] },
-  { name: "Markdown", extensions: ["md","markdown"] },
+  {
+    name: "JavaScript / TypeScript",
+    extensions: ["js", "ts", "jsx", "tsx", "mjs"],
+  },
+  { name: "Web Files", extensions: ["html", "htm", "css", "scss", "less"] },
+  {
+    name: "Data / Config",
+    extensions: ["json", "jsonc", "xml", "yaml", "yml", "sql"],
+  },
+  { name: "Markdown", extensions: ["md", "markdown"] },
   { name: "Python", extensions: ["py"] },
   { name: "All Files", extensions: ["*"] },
 ];
@@ -232,8 +285,7 @@ ipcMain.handle("read-directory", async (e, dirPath) => {
         type: entry.isDirectory() ? "directory" : "file",
       }))
       .sort((a, b) => {
-        if (a.type !== b.type)
-          return a.type === "directory" ? -1 : 1;
+        if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
         return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
       });
   } catch {
@@ -267,13 +319,19 @@ function readRecentWorkspaces() {
   try {
     const p = path.join(getNoterDataDir(), "recent-workspaces.json");
     if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf-8"));
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   return [];
 }
 
 function writeRecentWorkspaces(list) {
   const dir = ensureNoterDataDir();
-  fs.writeFileSync(path.join(dir, "recent-workspaces.json"), JSON.stringify(list, null, 2), "utf-8");
+  fs.writeFileSync(
+    path.join(dir, "recent-workspaces.json"),
+    JSON.stringify(list, null, 2),
+    "utf-8",
+  );
 }
 
 // Read noter.workspace metadata file from a workspace folder
@@ -282,7 +340,9 @@ ipcMain.handle("workspace-read-meta", (e, folderPath) => {
     const metaPath = path.join(folderPath, WORKSPACE_META_FILE);
     if (!fs.existsSync(metaPath)) return null;
     return JSON.parse(fs.readFileSync(metaPath, "utf-8"));
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 });
 
 // Write noter.workspace metadata file to a workspace folder
@@ -291,7 +351,9 @@ ipcMain.handle("workspace-write-meta", (e, folderPath, data) => {
     const metaPath = path.join(folderPath, WORKSPACE_META_FILE);
     fs.writeFileSync(metaPath, JSON.stringify(data, null, 2), "utf-8");
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 });
 
 // Recent workspaces list (stored in %APPDATA%/Noter/)
@@ -300,21 +362,32 @@ ipcMain.handle("get-recent-workspaces", () => readRecentWorkspaces());
 ipcMain.handle("add-recent-workspace", (e, entry) => {
   try {
     let list = readRecentWorkspaces();
-    list = [entry, ...list.filter(w => w.path !== entry.path)].slice(0, 20);
+    list = [entry, ...list.filter((w) => w.path !== entry.path)].slice(0, 20);
     writeRecentWorkspaces(list);
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle("remove-recent-workspace", (e, workspacePath) => {
   try {
-    writeRecentWorkspaces(readRecentWorkspaces().filter(w => w.path !== workspacePath));
+    writeRecentWorkspaces(
+      readRecentWorkspaces().filter((w) => w.path !== workspacePath),
+    );
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle("clear-recent-workspaces", () => {
-  try { writeRecentWorkspaces([]); return true; } catch { return false; }
+  try {
+    writeRecentWorkspaces([]);
+    return true;
+  } catch {
+    return false;
+  }
 });
 
 // Legacy: export workspace as a .noterws file (kept as optional export)
@@ -334,7 +407,9 @@ ipcMain.handle("save-workspace", async (e, data) => {
   try {
     fs.writeFileSync(result.filePath, JSON.stringify(data, null, 2), "utf8");
     return result.filePath;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 });
 
 ipcMain.handle("open-workspace", async () => {
@@ -353,7 +428,9 @@ ipcMain.handle("open-workspace", async () => {
   try {
     const raw = fs.readFileSync(result.filePaths[0], "utf-8");
     return JSON.parse(raw);
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 });
 
 // ─── External Links ──────────────────────────────────────────────────────────
@@ -382,24 +459,39 @@ ipcMain.handle("terminal-exec", async (e, command) => {
         terminalCwd = resolved;
         return { stdout: "", stderr: "", cwd: terminalCwd, exitCode: 0 };
       }
-      return { stdout: "", stderr: `cd: No such directory: ${target}\n`, cwd: terminalCwd, exitCode: 1 };
+      return {
+        stdout: "",
+        stderr: `cd: No such directory: ${target}\n`,
+        cwd: terminalCwd,
+        exitCode: 1,
+      };
     } catch (err) {
-      return { stdout: "", stderr: err.message + "\n", cwd: terminalCwd, exitCode: 1 };
+      return {
+        stdout: "",
+        stderr: err.message + "\n",
+        cwd: terminalCwd,
+        exitCode: 1,
+      };
     }
   }
 
   return new Promise((resolve) => {
     exec(
       cmd,
-      { cwd: terminalCwd, env: process.env, shell: true, maxBuffer: 2 * 1024 * 1024 },
+      {
+        cwd: terminalCwd,
+        env: process.env,
+        shell: true,
+        maxBuffer: 2 * 1024 * 1024,
+      },
       (err, stdout, stderr) => {
         resolve({
-          stdout:   stdout || "",
-          stderr:   err && !stderr ? err.message + "\n" : (stderr || ""),
-          cwd:      terminalCwd,
-          exitCode: err ? (err.code || 1) : 0,
+          stdout: stdout || "",
+          stderr: err && !stderr ? err.message + "\n" : stderr || "",
+          cwd: terminalCwd,
+          exitCode: err ? err.code || 1 : 0,
         });
-      }
+      },
     );
   });
 });
@@ -417,7 +509,9 @@ ipcMain.handle("pty-create", (e, { cols = 80, rows = 24, cwd } = {}) => {
     try {
       if (nodePty && ptyProcess.kill) ptyProcess.kill();
       else ptyProcess.kill?.("SIGTERM");
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     ptyProcess = null;
   }
 
@@ -467,7 +561,9 @@ ipcMain.handle("pty-create", (e, { cols = 80, rows = 24, cwd } = {}) => {
           mainWindow.webContents.send("pty-exit", code ?? 0);
         ptyProcess = null;
       });
-      ptyProcess.on("error", () => { ptyProcess = null; });
+      ptyProcess.on("error", () => {
+        ptyProcess = null;
+      });
     }
 
     const shellBasename = path.basename(shell).replace(/\.exe$/i, "");
@@ -482,14 +578,18 @@ ipcMain.on("pty-write", (e, data) => {
   try {
     if (nodePty && ptyProcess.write) ptyProcess.write(data);
     else ptyProcess.stdin?.write(data);
-  } catch { /* ignore dead process */ }
+  } catch {
+    /* ignore dead process */
+  }
 });
 
 ipcMain.handle("pty-resize", (e, { cols, rows }) => {
   if (!ptyProcess) return;
   try {
     if (nodePty && ptyProcess.resize) ptyProcess.resize(cols, rows);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 });
 
 ipcMain.handle("pty-kill", () => {
@@ -497,66 +597,94 @@ ipcMain.handle("pty-kill", () => {
   try {
     if (nodePty && ptyProcess.kill) ptyProcess.kill();
     else ptyProcess.kill?.("SIGTERM");
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   ptyProcess = null;
 });
 
 // ─── Project Structure Creator ───────────────────────────────────────────────
-ipcMain.handle("create-project-structure", async (e, { folderPath, files, setupCommand }) => {
-  const result = { success: true, filesCreated: 0, setupDone: false, setupError: null };
+ipcMain.handle(
+  "create-project-structure",
+  async (e, { folderPath, files, setupCommand }) => {
+    const result = {
+      success: true,
+      filesCreated: 0,
+      setupDone: false,
+      setupError: null,
+    };
 
-  try {
-    for (const file of files) {
-      const relParts = file.path.split("/");
-      const filePath = path.join(folderPath, ...relParts);
-      const dir = path.dirname(filePath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      if (!fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, file.content, "utf8");
-        result.filesCreated++;
+    try {
+      for (const file of files) {
+        const relParts = file.path.split("/");
+        const filePath = path.join(folderPath, ...relParts);
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        if (!fs.existsSync(filePath)) {
+          fs.writeFileSync(filePath, file.content, "utf8");
+          result.filesCreated++;
+        }
+      }
+    } catch (err) {
+      return {
+        success: false,
+        error: err.message,
+        filesCreated: result.filesCreated,
+      };
+    }
+
+    if (setupCommand) {
+      try {
+        await new Promise((resolve) => {
+          exec(
+            setupCommand,
+            { cwd: folderPath, env: process.env, shell: true, timeout: 60000 },
+            (err, _stdout, stderr) => {
+              if (err) result.setupError = stderr || err.message;
+              else result.setupDone = true;
+              resolve();
+            },
+          );
+        });
+      } catch (err) {
+        result.setupError = err.message;
       }
     }
-  } catch (err) {
-    return { success: false, error: err.message, filesCreated: result.filesCreated };
-  }
 
-  if (setupCommand) {
-    try {
-      await new Promise((resolve) => {
-        exec(
-          setupCommand,
-          { cwd: folderPath, env: process.env, shell: true, timeout: 60000 },
-          (err, _stdout, stderr) => {
-            if (err) result.setupError = stderr || err.message;
-            else result.setupDone = true;
-            resolve();
-          }
-        );
-      });
-    } catch (err) {
-      result.setupError = err.message;
-    }
-  }
-
-  return result;
-});
+    return result;
+  },
+);
 
 // ─── Extension Marketplace IPC ───────────────────────────────────────────────
 
 // Fetch live registry from GitHub (falls back in renderer if this returns null)
 ipcMain.handle("marketplace-fetch-registry", () => {
-  const REGISTRY_URL = "https://raw.githubusercontent.com/noter-app/marketplace/main/marketplace.json";
+  const REGISTRY_URL =
+    "https://raw.githubusercontent.com/noter-app/marketplace/main/marketplace.json";
   return new Promise((resolve) => {
-    https.get(REGISTRY_URL, { timeout: 5000 }, (res) => {
-      if (res.statusCode !== 200) { res.resume(); return resolve(null); }
-      let data = "";
-      res.on("data", chunk => { data += chunk; });
-      res.on("end", () => {
-        try { resolve(JSON.parse(data)); }
-        catch { resolve(null); }
+    https
+      .get(REGISTRY_URL, { timeout: 5000 }, (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          return resolve(null);
+        }
+        let data = "";
+        res.on("data", (chunk) => {
+          data += chunk;
+        });
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch {
+            resolve(null);
+          }
+        });
+      })
+      .on("error", () => resolve(null))
+      .on("timeout", function () {
+        this.destroy();
+        resolve(null);
       });
-    }).on("error", () => resolve(null))
-      .on("timeout", function() { this.destroy(); resolve(null); });
   });
 });
 
@@ -565,7 +693,11 @@ ipcMain.handle("marketplace-get-installed", () => readInstalledRegistry());
 ipcMain.handle("marketplace-install", (e, meta) => {
   try {
     const installed = readInstalledRegistry();
-    installed[meta.id] = { ...meta, enabled: true, installedAt: new Date().toISOString() };
+    installed[meta.id] = {
+      ...meta,
+      enabled: true,
+      installedAt: new Date().toISOString(),
+    };
     writeInstalledRegistry(installed);
     return { success: true };
   } catch (err) {
@@ -587,7 +719,10 @@ ipcMain.handle("marketplace-uninstall", (e, id) => {
 ipcMain.handle("marketplace-toggle", (e, { id, enabled }) => {
   try {
     const installed = readInstalledRegistry();
-    if (installed[id]) { installed[id].enabled = enabled; writeInstalledRegistry(installed); }
+    if (installed[id]) {
+      installed[id].enabled = enabled;
+      writeInstalledRegistry(installed);
+    }
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -595,18 +730,30 @@ ipcMain.handle("marketplace-toggle", (e, { id, enabled }) => {
 });
 
 ipcMain.handle("marketplace-get-settings", () => {
-  const defaults = { autoUpdate: true, showRecommendations: true, installedFirst: false, checkUpdatesOnStartup: true };
+  const defaults = {
+    autoUpdate: true,
+    showRecommendations: true,
+    installedFirst: false,
+    checkUpdatesOnStartup: true,
+  };
   try {
     const p = path.join(getExtensionsDir(), "settings.json");
-    if (fs.existsSync(p)) return { ...defaults, ...JSON.parse(fs.readFileSync(p, "utf-8")) };
-  } catch { /* use defaults */ }
+    if (fs.existsSync(p))
+      return { ...defaults, ...JSON.parse(fs.readFileSync(p, "utf-8")) };
+  } catch {
+    /* use defaults */
+  }
   return defaults;
 });
 
 ipcMain.handle("marketplace-save-settings", (e, settings) => {
   try {
     const dir = ensureExtDir();
-    fs.writeFileSync(path.join(dir, "settings.json"), JSON.stringify(settings, null, 2), "utf-8");
+    fs.writeFileSync(
+      path.join(dir, "settings.json"),
+      JSON.stringify(settings, null, 2),
+      "utf-8",
+    );
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -619,7 +766,9 @@ ipcMain.handle("fs-rename", async (e, oldPath, newPath) => {
   try {
     await fs.promises.rename(oldPath, newPath);
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle("fs-delete", async (e, filePath) => {
@@ -636,7 +785,9 @@ ipcMain.handle("fs-delete", async (e, filePath) => {
         fs.unlinkSync(filePath);
       }
       return true;
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }
 });
 
@@ -646,7 +797,9 @@ ipcMain.handle("fs-new-file", async (e, dirPath, name) => {
     if (fs.existsSync(filePath)) return false;
     fs.writeFileSync(filePath, "", "utf8");
     return filePath;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle("fs-new-folder", async (e, dirPath, name) => {
@@ -655,7 +808,9 @@ ipcMain.handle("fs-new-folder", async (e, dirPath, name) => {
     if (fs.existsSync(folderPath)) return false;
     fs.mkdirSync(folderPath, { recursive: true });
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle("fs-duplicate", async (e, srcPath, destPath) => {
@@ -671,7 +826,9 @@ ipcMain.handle("fs-duplicate", async (e, srcPath, destPath) => {
     }
     fs.copyFileSync(srcPath, finalDest);
     return path.basename(finalDest);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle("shell-reveal", async (e, filePath) => {
@@ -689,19 +846,27 @@ ipcMain.handle("watch-file", (e, filePath) => {
       if (eventType !== "change") return;
       // Debounce to avoid duplicate events
       clearTimeout(watchDebounce.get(filePath));
-      watchDebounce.set(filePath, setTimeout(() => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("file-externally-changed", filePath);
-        }
-      }, 400));
+      watchDebounce.set(
+        filePath,
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("file-externally-changed", filePath);
+          }
+        }, 400),
+      );
     });
     fileWatchers.set(filePath, watcher);
-  } catch { /* non-watchable files are fine */ }
+  } catch {
+    /* non-watchable files are fine */
+  }
 });
 
 ipcMain.handle("unwatch-file", (e, filePath) => {
   const w = fileWatchers.get(filePath);
-  if (w) { w.close(); fileWatchers.delete(filePath); }
+  if (w) {
+    w.close();
+    fileWatchers.delete(filePath);
+  }
   clearTimeout(watchDebounce.get(filePath));
   watchDebounce.delete(filePath);
 });
@@ -709,12 +874,65 @@ ipcMain.handle("unwatch-file", (e, filePath) => {
 // ─── Workspace Files Listing (for Quick Open / Ctrl+P) ───────────────────────
 ipcMain.handle("list-workspace-files", async (e, rootPath) => {
   if (!rootPath) return [];
-  const SKIP_DIRS = new Set(["node_modules",".git","dist","build",".next","out","coverage",".cache","__pycache__","venv",".venv","target"]);
+  const SKIP_DIRS = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    ".next",
+    "out",
+    "coverage",
+    ".cache",
+    "__pycache__",
+    "venv",
+    ".venv",
+    "target",
+  ]);
   const TEXT_EXTS = new Set([
-    "txt","js","mjs","cjs","ts","jsx","tsx","html","htm","css","scss","less",
-    "json","jsonc","md","markdown","py","rb","php","java","c","h","cpp","cc",
-    "cs","go","rs","sh","bash","xml","svg","yaml","yml","sql","env","toml",
-    "ini","cfg","conf","lock","gitignore","editorconfig","prettierrc","eslintrc",
+    "txt",
+    "js",
+    "mjs",
+    "cjs",
+    "ts",
+    "jsx",
+    "tsx",
+    "html",
+    "htm",
+    "css",
+    "scss",
+    "less",
+    "json",
+    "jsonc",
+    "md",
+    "markdown",
+    "py",
+    "rb",
+    "php",
+    "java",
+    "c",
+    "h",
+    "cpp",
+    "cc",
+    "cs",
+    "go",
+    "rs",
+    "sh",
+    "bash",
+    "xml",
+    "svg",
+    "yaml",
+    "yml",
+    "sql",
+    "env",
+    "toml",
+    "ini",
+    "cfg",
+    "conf",
+    "lock",
+    "gitignore",
+    "editorconfig",
+    "prettierrc",
+    "eslintrc",
   ]);
   const files = [];
 
@@ -724,7 +942,12 @@ ipcMain.handle("list-workspace-files", async (e, rootPath) => {
       const entries = await fs.promises.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
         if (files.length >= 2000) break;
-        if (entry.name.startsWith(".") && entry.name !== ".env" && entry.name !== ".gitignore") continue;
+        if (
+          entry.name.startsWith(".") &&
+          entry.name !== ".env" &&
+          entry.name !== ".gitignore"
+        )
+          continue;
         if (SKIP_DIRS.has(entry.name)) continue;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
@@ -736,7 +959,9 @@ ipcMain.handle("list-workspace-files", async (e, rootPath) => {
           }
         }
       }
-    } catch { /* skip unreadable */ }
+    } catch {
+      /* skip unreadable */
+    }
   }
 
   await walk(rootPath, 0);
@@ -744,62 +969,119 @@ ipcMain.handle("list-workspace-files", async (e, rootPath) => {
 });
 
 // ─── Global Search ────────────────────────────────────────────────────────────
-ipcMain.handle("global-search", async (e, { query, rootPath, caseSensitive, useRegex }) => {
-  if (!query || !rootPath) return [];
+ipcMain.handle(
+  "global-search",
+  async (e, { query, rootPath, caseSensitive, useRegex }) => {
+    if (!query || !rootPath) return [];
 
-  const TEXT_EXTS = new Set([
-    "txt","js","mjs","cjs","ts","jsx","tsx","html","htm","css","scss","less",
-    "json","jsonc","md","markdown","py","rb","php","java","c","h","cpp","cc",
-    "cs","go","rs","sh","bash","xml","svg","yaml","yml","sql","env",
-  ]);
-  const SKIP_DIRS = new Set(["node_modules",".git","dist","build",".next","out","coverage",".cache"]);
+    const TEXT_EXTS = new Set([
+      "txt",
+      "js",
+      "mjs",
+      "cjs",
+      "ts",
+      "jsx",
+      "tsx",
+      "html",
+      "htm",
+      "css",
+      "scss",
+      "less",
+      "json",
+      "jsonc",
+      "md",
+      "markdown",
+      "py",
+      "rb",
+      "php",
+      "java",
+      "c",
+      "h",
+      "cpp",
+      "cc",
+      "cs",
+      "go",
+      "rs",
+      "sh",
+      "bash",
+      "xml",
+      "svg",
+      "yaml",
+      "yml",
+      "sql",
+      "env",
+    ]);
+    const SKIP_DIRS = new Set([
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      ".next",
+      "out",
+      "coverage",
+      ".cache",
+    ]);
 
-  const results = [];
+    const results = [];
 
-  function makePattern(q, cs, rx) {
-    try {
-      const flags = cs ? "g" : "gi";
-      return new RegExp(rx ? q : q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), flags);
-    } catch { return null; }
-  }
-
-  // ── Async reads — never blocks the main-process event loop ───────────────
-  async function searchFile(filePath) {
-    if (results.length >= 400) return;
-    try {
-      const content = await fs.promises.readFile(filePath, "utf-8");
-      const lines   = content.split("\n");
-      const pattern = makePattern(query, caseSensitive, useRegex);
-      if (!pattern) return;
-      for (let i = 0; i < lines.length; i++) {
-        if (results.length >= 400) break;
-        pattern.lastIndex = 0;
-        if (pattern.test(lines[i])) {
-          results.push({ file: filePath, line: lines[i].slice(0, 300), lineNumber: i + 1 });
-        }
+    function makePattern(q, cs, rx) {
+      try {
+        const flags = cs ? "g" : "gi";
+        return new RegExp(
+          rx ? q : q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          flags,
+        );
+      } catch {
+        return null;
       }
-    } catch { /* skip binary / unreadable files */ }
-  }
+    }
 
-  async function walk(dir, depth) {
-    if (depth > 12 || results.length >= 400) return;
-    try {
-      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (results.length >= 400) break;
-        if (entry.name.startsWith(".") && entry.name !== ".env") continue;
-        if (SKIP_DIRS.has(entry.name)) continue;
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          await walk(full, depth + 1);
-        } else {
-          const ext = (entry.name.split(".").pop() || "").toLowerCase();
-          if (TEXT_EXTS.has(ext)) await searchFile(full);
+    // ── Async reads — never blocks the main-process event loop ───────────────
+    async function searchFile(filePath) {
+      if (results.length >= 400) return;
+      try {
+        const content = await fs.promises.readFile(filePath, "utf-8");
+        const lines = content.split("\n");
+        const pattern = makePattern(query, caseSensitive, useRegex);
+        if (!pattern) return;
+        for (let i = 0; i < lines.length; i++) {
+          if (results.length >= 400) break;
+          pattern.lastIndex = 0;
+          if (pattern.test(lines[i])) {
+            results.push({
+              file: filePath,
+              line: lines[i].slice(0, 300),
+              lineNumber: i + 1,
+            });
+          }
         }
+      } catch {
+        /* skip binary / unreadable files */
       }
-    } catch { /* skip unreadable dirs */ }
-  }
+    }
 
-  await walk(rootPath, 0);
-  return results;
-});
+    async function walk(dir, depth) {
+      if (depth > 12 || results.length >= 400) return;
+      try {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (results.length >= 400) break;
+          if (entry.name.startsWith(".") && entry.name !== ".env") continue;
+          if (SKIP_DIRS.has(entry.name)) continue;
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            await walk(full, depth + 1);
+          } else {
+            const ext = (entry.name.split(".").pop() || "").toLowerCase();
+            if (TEXT_EXTS.has(ext)) await searchFile(full);
+          }
+        }
+      } catch {
+        /* skip unreadable dirs */
+      }
+    }
+
+    await walk(rootPath, 0);
+    return results;
+  },
+);
