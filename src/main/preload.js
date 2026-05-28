@@ -80,4 +80,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
   addRecentWorkspace:    (entry)             => ipcRenderer.invoke("add-recent-workspace", entry),
   removeRecentWorkspace: (workspacePath)     => ipcRenderer.invoke("remove-recent-workspace", workspacePath),
   clearRecentWorkspaces: ()                  => ipcRenderer.invoke("clear-recent-workspaces"),
+
+  // ── Workspace folder watcher (Phase 4 — explorer auto-refresh) ──
+  watchWorkspace:     (folderPath) => ipcRenderer.invoke("watch-workspace", folderPath),
+  unwatchWorkspace:   (folderPath) => ipcRenderer.invoke("unwatch-workspace", folderPath),
+  onWorkspaceChange:  (cb) => ipcRenderer.on("workspace-changed", (_e, data) => cb(data)),
+  offWorkspaceChange: ()   => ipcRenderer.removeAllListeners("workspace-changed"),
+
+  // ── Read file content (IntelliSense workspace indexer) ──────────
+  readFileContent: (filePath) => ipcRenderer.invoke("read-file-content", filePath),
+
+  // ── Performance diagnostics ──────────────────────────────────────
+  getProcessMemory: ()      => ipcRenderer.invoke("get-process-memory"),
+  readGitignore:    (dir)   => ipcRenderer.invoke("read-gitignore", dir),
+  reloadWindow:     ()      => ipcRenderer.invoke("reload-window"),
+
+  // ── Crash recovery (file-system level backup) ──────────────────
+  crashBackupRead:  ()      => ipcRenderer.invoke("crash-backup-read"),
+  crashBackupWrite: (data)  => ipcRenderer.invoke("crash-backup-write", data),
+  crashBackupClear: ()      => ipcRenderer.invoke("crash-backup-clear"),
 });

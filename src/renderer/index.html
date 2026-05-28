@@ -119,6 +119,9 @@
           <div class="menu-option" id="documentation">Documentation</div>
           <div class="menu-option" id="shortcuts">Shortcuts</div>
           <div class="separator"></div>
+          <div class="menu-option" id="performanceDiagnostics">Performance Diagnostics</div>
+          <div class="menu-option" id="reloadWindowMenu">Reload Window</div>
+          <div class="separator"></div>
           <div class="menu-option" id="aboutApp">About</div>
         </div>
       </div>
@@ -297,6 +300,12 @@
 
     <!-- ── Scripts (Monaco AFTER xterm so UMD globals are already set) ── -->
     <script src="../../node_modules/monaco-editor/min/vs/loader.js"></script>
+
+    <!-- ── Enterprise performance modules (load before app.js) ── -->
+    <script src="./modules/model-manager.js"></script>
+    <script src="./modules/performance-monitor.js"></script>
+    <script src="./modules/crash-recovery.js"></script>
+
     <script src="./app.js"></script>
     <script src="./modules/terminal.js"></script>
     <script src="./modules/split-editor.js"></script>
@@ -306,6 +315,8 @@
     <script src="./modules/context-menu.js"></script>
     <script src="./modules/activity-bar.js"></script>
     <script src="./modules/settings-ui.js"></script>
+    <!-- ── Phase 4: IntelliSense core engine (loads before extensions) ── -->
+    <script src="./modules/intellisense.js"></script>
 
     <!-- ── Official Extensions (each extension is its own file) ── -->
     <script src="./extensions/code-runner.js"></script>
@@ -330,6 +341,12 @@
     <script src="./extensions/markdown-pro.js"></script>
     <script src="./extensions/bracket-colors.js"></script>
     <script src="./extensions/json-wizard.js"></script>
+    <!-- ── Phase 4: IntelliSense extensions ── -->
+    <script src="./extensions/js-intellisense.js"></script>
+    <script src="./extensions/python-intellisense.js"></script>
+    <script src="./extensions/web-intellisense.js"></script>
+    <script src="./extensions/cpp-intellisense.js"></script>
+    <script src="./extensions/java-intellisense.js"></script>
     <!-- Extension Runtime — loads after all extensions are registered -->
     <script src="./extensions/index.js"></script>
   </body>

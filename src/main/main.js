@@ -871,6 +871,58 @@ ipcMain.handle("unwatch-file", (e, filePath) => {
   watchDebounce.delete(filePath);
 });
 
+// ─── Workspace Folder Watcher (Phase 4 — explorer auto-refresh) ──────────────
+const workspaceWatchers  = new Map();
+const workspaceDebounces = new Map();
+
+ipcMain.handle("watch-workspace", (e, folderPath) => {
+  if (!folderPath) return;
+  // Close previous watcher for this folder if any
+  const prev = workspaceWatchers.get(folderPath);
+  if (prev) { try { prev.close(); } catch (_) {} }
+
+  try {
+    const watcher = fs.watch(folderPath, { recursive: true }, (eventType, filename) => {
+      if (!filename) return;
+      // Skip noisy paths
+      const fp = filename.replace(/\\/g, "/");
+      if (fp.includes("node_modules") || fp.includes(".git") ||
+          fp.includes("__pycache__")  || fp.includes(".next") ||
+          fp.includes("dist/")        || fp.includes("build/")) return;
+
+      clearTimeout(workspaceDebounces.get(folderPath));
+      workspaceDebounces.set(folderPath, setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("workspace-changed", { folderPath, filename, eventType });
+        }
+      }, 350));
+    });
+
+    watcher.on("error", () => {
+      workspaceWatchers.delete(folderPath);
+    });
+
+    workspaceWatchers.set(folderPath, watcher);
+  } catch (_) { /* non-watchable — silently skip */ }
+});
+
+ipcMain.handle("unwatch-workspace", (e, folderPath) => {
+  const w = workspaceWatchers.get(folderPath);
+  if (w) { try { w.close(); } catch (_) {} workspaceWatchers.delete(folderPath); }
+  clearTimeout(workspaceDebounces.get(folderPath));
+  workspaceDebounces.delete(folderPath);
+});
+
+// ─── Read file content (for IntelliSense workspace indexer) ──────────────────
+ipcMain.handle("read-file-content", async (e, filePath) => {
+  if (!filePath) return null;
+  try {
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile() || stat.size > 512 * 1024) return null; // skip > 512 KB
+    return await fs.promises.readFile(filePath, "utf-8");
+  } catch (_) { return null; }
+});
+
 // ─── Workspace Files Listing (for Quick Open / Ctrl+P) ───────────────────────
 ipcMain.handle("list-workspace-files", async (e, rootPath) => {
   if (!rootPath) return [];
@@ -966,6 +1018,66 @@ ipcMain.handle("list-workspace-files", async (e, rootPath) => {
 
   await walk(rootPath, 0);
   return files;
+});
+
+// ─── Process memory (for renderer performance panel) ─────────────────────────
+ipcMain.handle("get-process-memory", () => {
+  const m = process.memoryUsage();
+  return {
+    rss:       Math.round(m.rss       / 1_048_576),
+    heapUsed:  Math.round(m.heapUsed  / 1_048_576),
+    heapTotal: Math.round(m.heapTotal / 1_048_576),
+    external:  Math.round(m.external  / 1_048_576),
+  };
+});
+
+// ─── .gitignore reader ────────────────────────────────────────────────────────
+ipcMain.handle("read-gitignore", async (e, dirPath) => {
+  if (!dirPath) return [];
+  try {
+    const p = path.join(dirPath, ".gitignore");
+    if (!fs.existsSync(p)) return [];
+    return fs.readFileSync(p, "utf-8")
+      .split("\n")
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith("#"));
+  } catch { return []; }
+});
+
+// ─── File-system crash backup (supplements localStorage snapshot) ─────────────
+ipcMain.handle("crash-backup-read", () => {
+  try {
+    const p = path.join(getNoterDataDir(), "crash-backup.json");
+    if (!fs.existsSync(p)) return null;
+    return JSON.parse(fs.readFileSync(p, "utf-8"));
+  } catch { return null; }
+});
+
+ipcMain.handle("crash-backup-write", (e, data) => {
+  try {
+    const dir = ensureNoterDataDir();
+    fs.writeFileSync(
+      path.join(dir, "crash-backup.json"),
+      JSON.stringify(data),
+      "utf-8"
+    );
+    return true;
+  } catch { return false; }
+});
+
+ipcMain.handle("crash-backup-clear", () => {
+  try {
+    const p = path.join(getNoterDataDir(), "crash-backup.json");
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+    return true;
+  } catch { return false; }
+});
+
+// ─── Reload renderer window ───────────────────────────────────────────────────
+ipcMain.handle("reload-window", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.reload();
+  }
 });
 
 // ─── Global Search ────────────────────────────────────────────────────────────
