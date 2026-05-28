@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════
-   NOTER APP — features.css
-   Command Palette · Terminal · Split Editor · Global Search
+   NOTER APP v2 — features.css
+   Context Menu · Command Palette · Terminal · Split Editor · Search
 ═══════════════════════════════════════════════════════════════ */
 
 /* ── Editor-area layout override (flex column for terminal) ── */
@@ -9,7 +9,8 @@
   flex-direction: column;
 }
 
-#breadcrumb { flex-shrink: 0; }  /* prevent shrink — height defined in style.css */
+#editor-topbar { flex-shrink: 0; }
+#breadcrumb    { flex-shrink: 0; }
 
 #editor-wrapper {
   flex: 1;
@@ -22,7 +23,7 @@
 #editor {
   flex: 1;
   min-width: 0;
-  /* height:100% from style.css still works via flex fill */
+  min-height: 0;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -33,11 +34,11 @@
   z-index: 7000;
   min-width: 200px;
   max-width: 280px;
-  background: #1a1b2e;
-  border: 1px solid rgba(137, 180, 250, 0.18);
+  background: #161b22;
+  border: 1px solid var(--gh-border);
   border-radius: 10px;
   padding: 5px;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.70), 0 0 0 1px rgba(255,255,255,0.03);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.72), 0 0 0 1px rgba(255,255,255,0.03);
   display: none;
   animation: ctxIn 0.09s ease-out;
   user-select: none;
@@ -108,11 +109,11 @@
 #qo-box {
   width: 580px;
   max-width: calc(100vw - 40px);
-  background: #181825;
-  border: 1px solid rgba(137, 180, 250, 0.22);
+  background: #161b22;
+  border: 1px solid var(--gh-border);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.03);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.70), 0 0 0 1px rgba(255,255,255,0.03);
   animation: cpDropIn 0.13s ease-out;
 }
 
@@ -211,11 +212,11 @@
 #cp-box {
   width: 580px;
   max-width: calc(100vw - 40px);
-  background: #181825;
-  border: 1px solid rgba(137, 180, 250, 0.22);
+  background: #161b22;
+  border: 1px solid var(--gh-border);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.03);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.70), 0 0 0 1px rgba(255,255,255,0.03);
   animation: cpDropIn 0.13s ease-out;
 }
 
@@ -288,21 +289,21 @@
 .cp-empty    { padding: 20px; text-align: center; color: var(--overlay0); font-size: 13px; }
 
 /* ═══════════════════════════════════════════════════════════
-   TERMINAL PANEL
+   TERMINAL PANEL  (xterm.js)
 ═══════════════════════════════════════════════════════════ */
 #terminal-panel {
   display: none;
   flex-direction: column;
-  height: 240px;
-  background: var(--crust);
-  border-top: 1px solid rgba(137, 180, 250, 0.10);
+  height: 260px;
+  background: #0d1117;
+  border-top: 1px solid var(--gh-border-muted);
   flex-shrink: 0;
   overflow: hidden;
   position: relative;
 }
 #terminal-panel.tp-visible { display: flex; }
 
-/* drag-to-resize handle at the top edge */
+/* Drag-to-resize handle */
 #tp-resize {
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -310,75 +311,89 @@
   cursor: row-resize;
   z-index: 5;
   background: transparent;
-  transition: background 0.15s;
+  transition: background 0.14s;
 }
-#tp-resize:hover { background: rgba(137,180,250,0.25); }
+#tp-resize:hover { background: rgba(88,166,255,0.28); }
 
+/* Terminal header */
 #tp-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px 0 14px;
-  height: 32px;
-  background: var(--mantle);
-  border-bottom: 1px solid rgba(137, 180, 250, 0.07);
+  padding: 0 8px 0 12px;
+  height: 34px;
+  background: #161b22;
+  border-bottom: 1px solid var(--gh-border-muted);
   flex-shrink: 0;
-}
-.tp-title {
-  color: var(--blue);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  gap: 8px;
 }
 
-#terminal-output {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 14px;
-  font-family: 'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--text);
-  scrollbar-width: thin;
-  scrollbar-color: var(--surface1) transparent;
-  word-break: break-all;
-}
-#terminal-output::-webkit-scrollbar { width: 4px; }
-#terminal-output::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 4px; }
-
-.term-cmd    { color: var(--green);  margin: 3px 0; font-weight: 600; }
-.term-stdout { color: var(--text);   white-space: pre-wrap; }
-.term-stderr { color: var(--red);    white-space: pre-wrap; }
-.term-info   { color: var(--blue);   font-style: italic; }
-
-#tp-input-row {
+.tp-header-left {
   display: flex;
   align-items: center;
-  padding: 5px 10px;
-  background: var(--mantle);
-  border-top: 1px solid rgba(137, 180, 250, 0.07);
-  flex-shrink: 0;
-  gap: 6px;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
 }
-#terminal-prompt {
-  color: var(--green);
-  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
-  font-size: 12.5px;
+.tp-header-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tp-term-icon { color: var(--gh-fg-subtle); flex-shrink: 0; }
+
+.tp-title {
+  color: var(--gh-fg-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  white-space: nowrap;
+}
+
+.tp-shell-badge {
+  background: var(--surface0);
+  color: var(--gh-fg-subtle);
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  border: 1px solid var(--gh-border-muted);
   white-space: nowrap;
   flex-shrink: 0;
-  font-weight: 600;
 }
-#terminal-input {
+
+.tp-btn {
+  width: 24px !important;
+  height: 24px !important;
+  font-size: 14px !important;
+  border-radius: 5px !important;
+}
+
+/* xterm.js mount container */
+#terminal-xterm {
   flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--text);
-  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
-  font-size: 12.5px;
-  caret-color: var(--pink);
+  min-height: 0;
+  overflow: hidden;
+  padding: 4px 0 0 4px;
+  background: #0d1117;
 }
-#terminal-input::placeholder { color: var(--overlay0); }
+
+/* Ensure xterm canvas fills its container */
+#terminal-xterm .terminal,
+#terminal-xterm .xterm {
+  height: 100% !important;
+}
+#terminal-xterm .xterm-viewport {
+  background: transparent !important;
+}
+/* Thin scrollbar inside xterm */
+#terminal-xterm .xterm-viewport::-webkit-scrollbar { width: 5px; }
+#terminal-xterm .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+#terminal-xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--surface1);
+  border-radius: 4px;
+}
 
 /* ═══════════════════════════════════════════════════════════
    SPLIT EDITOR  (right pane)
@@ -597,8 +612,8 @@
   width: 700px;
   max-width: calc(100vw - 40px);
   max-height: calc(100vh - 60px);
-  background: #181825;
-  border: 1px solid rgba(137, 180, 250, 0.18);
+  background: #161b22;
+  border: 1px solid var(--gh-border);
   border-radius: 14px;
   overflow: hidden;
   box-shadow: 0 32px 96px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.03);
@@ -694,3 +709,173 @@
   transition: background 0.10s, color 0.10s;
 }
 .proj-cancel-btn:hover { background: var(--surface1); color: var(--text); }
+
+/* ═══════════════════════════════════════════════════════════
+   RECENT WORKSPACES OVERLAY  (Open Workspace dialog)
+═══════════════════════════════════════════════════════════ */
+#ws-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 9100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.14s ease;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+#ws-modal {
+  background: #161b22;
+  border: 1px solid var(--gh-border, #30363d);
+  border-radius: 14px;
+  width: 560px;
+  max-width: 94vw;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.80);
+  overflow: hidden;
+  animation: cpDropIn 0.14s ease-out;
+}
+
+#ws-modal-header {
+  padding: 22px 24px 14px;
+  border-bottom: 1px solid var(--gh-border, #30363d);
+  flex-shrink: 0;
+}
+#ws-modal-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gh-text, #e6edf3);
+  margin: 0 0 4px;
+  letter-spacing: 0.01em;
+}
+#ws-modal-header p {
+  font-size: 12px;
+  color: var(--gh-subtext, #7d8590);
+  margin: 0;
+}
+
+#ws-modal-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  min-height: 88px;
+  scrollbar-width: thin;
+  scrollbar-color: #30363d transparent;
+}
+#ws-modal-list::-webkit-scrollbar       { width: 5px; }
+#ws-modal-list::-webkit-scrollbar-track { background: transparent; }
+#ws-modal-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+
+.ws-empty {
+  text-align: center;
+  color: var(--gh-subtext, #7d8590);
+  font-size: 13px;
+  padding: 32px 16px;
+  line-height: 1.9;
+}
+
+.ws-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.07s;
+  position: relative;
+  user-select: none;
+}
+.ws-item:hover { background: #21262d; }
+
+.ws-item-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+.ws-item-info { flex: 1; min-width: 0; }
+
+.ws-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gh-text, #e6edf3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-item-path {
+  font-size: 11px;
+  color: var(--gh-subtext, #7d8590);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.ws-item-date {
+  font-size: 10.5px;
+  color: var(--overlay0, #6c7086);
+  margin-top: 2px;
+}
+
+.ws-item-remove {
+  background: none;
+  border: none;
+  color: var(--gh-subtext, #7d8590);
+  cursor: pointer;
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.1s, background 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+.ws-item:hover .ws-item-remove { opacity: 1; }
+.ws-item-remove:hover {
+  background: rgba(248, 81, 73, 0.14);
+  color: var(--red, #f38ba8);
+  opacity: 1;
+}
+
+#ws-modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--gh-border, #30363d);
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.ws-btn {
+  padding: 7px 16px;
+  border-radius: 7px;
+  border: 1px solid var(--gh-border, #30363d);
+  background: #21262d;
+  color: var(--gh-text, #e6edf3);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+.ws-btn:hover { background: #2d333b; border-color: #58a6ff55; }
+
+.ws-btn-primary {
+  background: var(--gh-accent, #58a6ff);
+  border-color: var(--gh-accent, #58a6ff);
+  color: #fff;
+  font-weight: 600;
+}
+.ws-btn-primary:hover { background: #79b8ff; border-color: #79b8ff; }
+
+.ws-btn-danger { color: var(--red, #f38ba8); }
+.ws-btn-danger:hover { background: rgba(248, 81, 73, 0.10); border-color: rgba(248, 81, 73, 0.3); }

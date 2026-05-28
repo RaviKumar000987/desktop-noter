@@ -907,6 +907,10 @@ const Marketplace = (() => {
       _refreshRows(id);
       _renderNav();
       _showToast(`${ext.name} installed successfully`, "success");
+      // Notify extension runtime to activate new extension
+      setTimeout(() => {
+        if (typeof ExtensionRuntime !== "undefined") ExtensionRuntime.refresh();
+      }, 200);
 
     } catch (err) {
       _installing.delete(id);
@@ -937,6 +941,9 @@ const Marketplace = (() => {
       _renderNav();
       _renderMain();
       _showToast(`${ext.name} uninstalled`, "info");
+      setTimeout(() => {
+        if (typeof ExtensionRuntime !== "undefined") ExtensionRuntime.refresh();
+      }, 200);
 
     } catch (err) {
       _uninstalling.delete(id);

@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+    />
+    <title>Noter</title>
+
+    <!-- App styles -->
+    <link rel="stylesheet" href="./styles/style.css" />
+    <link rel="stylesheet" href="./styles/features.css" />
+    <link rel="stylesheet" href="./styles/marketplace.css" />
+
+    <!-- xterm.js — MUST load before Monaco so UMD globals are set first -->
+    <link rel="stylesheet" href="../../node_modules/xterm/css/xterm.css" />
+    <script src="../../node_modules/xterm/lib/xterm.js"></script>
+    <script src="../../node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  </head>
+  <body>
+
+    <!-- ══════════════════════════════════════════
+         MENU BAR  (36 px) — drag region, holds
+         N logo · menus · file title · win controls
+    ══════════════════════════════════════════ -->
+    <div id="menubar">
+
+      <!-- Hidden sidebar-toggle kept for app.js backwards compat -->
+      <button id="sidebar-toggle" class="sidebar-toggle-btn" style="display:none" aria-hidden="true"></button>
+
+      <!-- N Logo (no-drag) -->
+      <div class="menu-n-logo" id="n-logo-btn" title="Noter">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect width="26" height="26" rx="5" fill="#21262d"/>
+          <path d="M6 20.5V5.5h3.4L17 17.4V5.5h3.2v15H17L9.4 8.6v11.9H6z" fill="#58a6ff"/>
+        </svg>
+      </div>
+
+      <!-- File menu -->
+      <div class="menu-item">
+        File
+        <div class="dropdown">
+          <div class="menu-option" id="newFile">New File <span class="shortcut">Ctrl+N</span></div>
+          <div class="menu-option" id="newTab">New Tab <span class="shortcut">Ctrl+T</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="openFile">Open File <span class="shortcut">Ctrl+O</span></div>
+          <div class="menu-option" id="openFolder">Open Folder</div>
+          <div class="separator"></div>
+          <div class="menu-option" id="saveFile">Save <span class="shortcut">Ctrl+S</span></div>
+          <div class="menu-option" id="saveAsFile">Save As <span class="shortcut">Ctrl+⇧+S</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="createWorkspace">New Workspace</div>
+          <div class="menu-option" id="saveWorkspace">Save Workspace</div>
+          <div class="menu-option" id="openWorkspace">Open Workspace</div>
+          <div class="separator"></div>
+          <div class="menu-option has-submenu" id="recentFilesMenu">
+            Recent Files <span class="submenu-arrow">▸</span>
+            <div class="submenu" id="recentFilesSubmenu"></div>
+          </div>
+          <div class="separator"></div>
+          <div class="menu-option" id="quitApp">Quit</div>
+        </div>
+      </div>
+
+      <!-- Edit menu -->
+      <div class="menu-item">
+        Edit
+        <div class="dropdown">
+          <div class="menu-option" id="undoAction">Undo <span class="shortcut">Ctrl+Z</span></div>
+          <div class="menu-option" id="redoAction">Redo <span class="shortcut">Ctrl+Y</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="cutAction">Cut <span class="shortcut">Ctrl+X</span></div>
+          <div class="menu-option" id="copyAction">Copy <span class="shortcut">Ctrl+C</span></div>
+          <div class="menu-option" id="pasteAction">Paste <span class="shortcut">Ctrl+V</span></div>
+          <div class="menu-option" id="selectAllAction">Select All <span class="shortcut">Ctrl+A</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="duplicateLineAction">Duplicate Line <span class="shortcut">Ctrl+D</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="findAction">Find <span class="shortcut">Ctrl+F</span></div>
+          <div class="menu-option" id="replaceAction">Find &amp; Replace <span class="shortcut">Ctrl+H</span></div>
+        </div>
+      </div>
+
+      <!-- View menu -->
+      <div class="menu-item">
+        View
+        <div class="dropdown">
+          <div class="menu-option" id="toggleExplorerMenu">Toggle Explorer <span class="shortcut">Ctrl+B</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="zoomIn">Zoom In <span class="shortcut">Ctrl++</span></div>
+          <div class="menu-option" id="zoomOut">Zoom Out <span class="shortcut">Ctrl+−</span></div>
+          <div class="menu-option" id="resetZoom">Reset Zoom <span class="shortcut">Ctrl+0</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="wordWrap">Toggle Word Wrap</div>
+          <div class="separator"></div>
+          <div class="menu-option" id="toggleTerminalMenu">Terminal <span class="shortcut">Ctrl+J</span></div>
+          <div class="menu-option" id="toggleSplitMenu">Split Editor <span class="shortcut">Ctrl+\</span></div>
+          <div class="menu-option" id="commandPaletteMenu">Command Palette <span class="shortcut">Ctrl+⇧+P</span></div>
+          <div class="menu-option" id="globalSearchMenu">Global Search <span class="shortcut">Ctrl+⇧+F</span></div>
+        </div>
+      </div>
+
+      <!-- Extensions menu -->
+      <div class="menu-item">
+        Extensions
+        <div class="dropdown">
+          <div class="menu-option" id="openMarketplace">Extension Marketplace <span class="shortcut">Ctrl+⇧+X</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="manageExtensions">Manage Installed</div>
+        </div>
+      </div>
+
+      <!-- Help menu -->
+      <div class="menu-item">
+        Help
+        <div class="dropdown">
+          <div class="menu-option" id="documentation">Documentation</div>
+          <div class="menu-option" id="shortcuts">Shortcuts</div>
+          <div class="separator"></div>
+          <div class="menu-option" id="aboutApp">About</div>
+        </div>
+      </div>
+
+      <!-- Center drag zone + title -->
+      <div class="menu-drag-zone">
+        <span id="modifiedDot" class="modified-dot" style="display:none">●</span>
+        <span id="titleFileName" class="menu-file-title">Untitled — Noter</span>
+      </div>
+
+      <!-- Window controls (no-drag) -->
+      <div class="win-controls" id="win-controls">
+        <button id="minimize" class="win-btn" title="Minimize">
+          <svg viewBox="0 0 12 12" width="12" height="12"><rect y="5.5" width="12" height="1" rx="0.5" fill="currentColor"/></svg>
+        </button>
+        <button id="maximize" class="win-btn" title="Maximize / Restore">
+          <svg viewBox="0 0 12 12" width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>
+        </button>
+        <button id="close" class="win-btn win-close" title="Close">
+          <svg viewBox="0 0 12 12" width="12" height="12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+    <!-- /menubar -->
+
+    <!-- ══════════════════════════════════════════
+         TAB BAR  (36 px)
+    ══════════════════════════════════════════ -->
+    <div id="tabbar">
+      <div id="tabs-container">
+        <div id="tabs-list"></div>
+      </div>
+      <button id="new-tab-btn" title="New Tab (Ctrl+T)">+</button>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         MAIN CONTENT = Activity Bar + Sidebar + Editor
+    ══════════════════════════════════════════ -->
+    <div id="main-content">
+
+      <!-- ── Activity Bar (48 px) ──────────────── -->
+      <div id="activity-bar">
+        <div class="ab-top">
+          <button class="ab-btn ab-active" id="ab-explorer" title="Explorer (Ctrl+B)" aria-label="Explorer">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 6a2 2 0 012-2h5.17a2 2 0 011.41.59l.83.83A2 2 0 0013.83 6H19a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V6z" fill="currentColor"/>
+            </svg>
+          </button>
+          <button class="ab-btn" id="ab-search" title="Search (Ctrl+Shift+F)" aria-label="Search">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="2"/>
+              <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="ab-btn" id="ab-extensions" title="Extensions (Ctrl+Shift+X)" aria-label="Extensions">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-2 .9-2 2v3.8h1.5c1.49 0 2.7 1.21 2.7 2.7 0 1.49-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+        <div class="ab-bottom">
+          <button class="ab-btn" id="ab-settings" title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54C14.71 2.17 14.51 2 14.27 2H9.73c-.24 0-.44.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.38 8.47c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.04.24.24.41.48.41h4.54c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6S10.02 8.4 12 8.4s3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Sidebar / Explorer ─────────────────── -->
+      <div id="sidebar">
+        <div id="sidebar-header">
+          <span class="sidebar-title">EXPLORER</span>
+          <div class="sidebar-header-actions">
+            <button class="sidebar-btn" id="refresh-explorer-btn" title="Refresh">↻</button>
+            <button class="sidebar-btn" id="open-folder-btn" title="Open Folder">📂</button>
+            <button class="sidebar-btn" id="gs-search-btn" title="Search (Ctrl+Shift+F)">⌕</button>
+          </div>
+        </div>
+
+        <!-- No folder open -->
+        <div id="no-folder-msg">
+          <p>No folder opened</p>
+          <button id="open-folder-btn2">Open Folder</button>
+        </div>
+
+        <!-- Explorer tree -->
+        <div id="explorer-content">
+          <div id="folder-name-row">
+            <div id="folder-name"></div>
+            <button class="sidebar-btn remove-ws-btn" id="remove-from-workspace-btn"
+                    title="Remove Folder from Workspace">⊗</button>
+          </div>
+          <div id="explorer-tree"></div>
+        </div>
+
+        <!-- Global Search panel -->
+        <div id="search-panel">
+          <div id="gs-toolbar">
+            <input id="gs-input" type="text" placeholder="Search in files…"
+                   autocomplete="off" spellcheck="false"/>
+            <div id="gs-options">
+              <button class="gs-opt-btn" id="gs-case-btn"  title="Case Sensitive">Aa</button>
+              <button class="gs-opt-btn" id="gs-regex-btn" title="Use Regex">.*</button>
+            </div>
+          </div>
+          <div id="gs-stats"></div>
+          <div id="gs-results"></div>
+        </div>
+      </div>
+
+      <!-- Resize handle -->
+      <div id="resize-handle"></div>
+
+      <!-- ── Editor area ──────────────────────────── -->
+      <div id="editor-area">
+
+        <!-- Editor top bar: breadcrumb + extension toolbar -->
+        <div id="editor-topbar">
+          <div id="breadcrumb" aria-label="File path breadcrumb"></div>
+          <div id="ext-toolbar" title="Extension Actions"></div>
+        </div>
+
+        <!-- editor-wrapper: main editor + optional split pane -->
+        <div id="editor-wrapper">
+          <div id="editor"></div>
+        </div>
+
+        <!-- Terminal panel -->
+        <div id="terminal-panel">
+          <div id="tp-resize" title="Drag to resize"></div>
+          <div id="tp-header">
+            <div class="tp-header-left">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" class="tp-term-icon">
+                <path d="M1.5 2.5h13A.5.5 0 0115 3v10a.5.5 0 01-.5.5H1.5A.5.5 0 011 13V3a.5.5 0 01.5-.5z" stroke="currentColor" stroke-width="1"/>
+                <path d="M3.5 5.5L6 8l-2.5 2.5M7 10.5h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="tp-title">TERMINAL</span>
+              <span class="tp-shell-badge" id="tp-shell-name">shell</span>
+            </div>
+            <div class="tp-header-right">
+              <button class="sidebar-btn tp-btn" id="terminal-new-btn"   title="New Terminal">+</button>
+              <button class="sidebar-btn tp-btn" id="terminal-clear-btn" title="Clear">⊗</button>
+              <button class="sidebar-btn tp-btn" id="terminal-close-btn" title="Close Terminal (Ctrl+J)">×</button>
+            </div>
+          </div>
+          <!-- xterm.js mount point -->
+          <div id="terminal-xterm"></div>
+        </div>
+
+      </div>
+      <!-- /editor-area -->
+
+    </div>
+    <!-- /main-content -->
+
+    <!-- ══════════════════════════════════════════
+         STATUS BAR  (28 px)
+    ══════════════════════════════════════════ -->
+    <div id="statusbar">
+      <div class="status-left">
+        <span id="language">Plain Text</span>
+        <span>UTF-8</span>
+      </div>
+      <div class="status-right">
+        <span id="wordCount">Words: 0</span>
+        <span id="charCount">Chars: 0</span>
+        <span id="lineCount">Lines: 0</span>
+        <span id="zoomStatus">100%</span>
+        <span id="wrapStatus">Wrap ON</span>
+        <span id="cursorPosition">Ln 1, Col 1</span>
+        <span>Spaces: 4</span>
+        <span id="fileStatus">Untitled</span>
+      </div>
+    </div>
+
+    <!-- ── Scripts (Monaco AFTER xterm so UMD globals are already set) ── -->
+    <script src="../../node_modules/monaco-editor/min/vs/loader.js"></script>
+    <script src="./app.js"></script>
+    <script src="./modules/terminal.js"></script>
+    <script src="./modules/split-editor.js"></script>
+    <script src="./modules/global-search.js"></script>
+    <script src="./modules/command-palette.js"></script>
+    <script src="./modules/marketplace.js"></script>
+    <script src="./modules/context-menu.js"></script>
+    <script src="./modules/extensions-runtime.js"></script>
+    <script src="./modules/activity-bar.js"></script>
+    <script src="./modules/settings-ui.js"></script>
+  </body>
+</html>

@@ -2,9 +2,38 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const fs     = require("fs");
 const path   = require("node:path");
 const https  = require("https");
-const { exec } = require("child_process");
+const { exec, spawn } = require("child_process");
 const os     = require("os");
 let mainWindow;
+
+// ─── node-pty (optional) ─────────────────────────────────────────────────────
+let nodePty = null;
+try { nodePty = require("node-pty"); } catch { /* use spawn fallback */ }
+
+// ─── PTY process state ───────────────────────────────────────────────────────
+let ptyProcess = null;
+
+function getShellConfig() {
+  if (process.platform === "win32") {
+    const psPath = path.join(
+      process.env.SYSTEMROOT || "C:\\Windows",
+      "System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+    );
+    const shell = fs.existsSync(psPath) ? psPath : (process.env.COMSPEC || "cmd.exe");
+    const isPowerShell = shell.toLowerCase().includes("powershell");
+    return {
+      shell,
+      args: isPowerShell ? ["-NoLogo"] : [],
+      env: { ...process.env, TERM: "xterm-256color" },
+    };
+  }
+  const shell = process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
+  return {
+    shell,
+    args: [],
+    env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" },
+  };
+}
 
 // ─── Extension Marketplace helpers ───────────────────────────────────────────
 function getExtensionsDir() {
@@ -40,17 +69,28 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
+    minWidth: 700,
+    minHeight: 480,
     frame: false,
     transparent: true,
-    alwaysOnTop: true,
     webPreferences: {
-      preload: path.join(__dirname, "./preload.js"),
+      preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
       contextIsolation: true,
     },
   });
-  mainWindow.loadFile("./index.html");
+  mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   // mainWindow.webContents.openDevTools();
+
+  mainWindow.on("closed", () => {
+    if (ptyProcess) {
+      try {
+        if (nodePty && ptyProcess.kill) ptyProcess.kill();
+        else ptyProcess.kill?.("SIGTERM");
+      } catch { /* ignore */ }
+      ptyProcess = null;
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -202,12 +242,88 @@ ipcMain.handle("read-directory", async (e, dirPath) => {
 });
 
 // ─── Workspace ────────────────────────────────────────────────────────────────
+
+const WORKSPACE_META_FILE = "noter.workspace";
+
+function getNoterDataDir() {
+  let base;
+  if (process.platform === "win32") {
+    base = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  } else if (process.platform === "darwin") {
+    base = path.join(os.homedir(), "Library", "Application Support");
+  } else {
+    base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  }
+  return path.join(base, "Noter");
+}
+
+function ensureNoterDataDir() {
+  const dir = getNoterDataDir();
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function readRecentWorkspaces() {
+  try {
+    const p = path.join(getNoterDataDir(), "recent-workspaces.json");
+    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf-8"));
+  } catch { /* fall through */ }
+  return [];
+}
+
+function writeRecentWorkspaces(list) {
+  const dir = ensureNoterDataDir();
+  fs.writeFileSync(path.join(dir, "recent-workspaces.json"), JSON.stringify(list, null, 2), "utf-8");
+}
+
+// Read noter.workspace metadata file from a workspace folder
+ipcMain.handle("workspace-read-meta", (e, folderPath) => {
+  try {
+    const metaPath = path.join(folderPath, WORKSPACE_META_FILE);
+    if (!fs.existsSync(metaPath)) return null;
+    return JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+  } catch { return null; }
+});
+
+// Write noter.workspace metadata file to a workspace folder
+ipcMain.handle("workspace-write-meta", (e, folderPath, data) => {
+  try {
+    const metaPath = path.join(folderPath, WORKSPACE_META_FILE);
+    fs.writeFileSync(metaPath, JSON.stringify(data, null, 2), "utf-8");
+    return true;
+  } catch { return false; }
+});
+
+// Recent workspaces list (stored in %APPDATA%/Noter/)
+ipcMain.handle("get-recent-workspaces", () => readRecentWorkspaces());
+
+ipcMain.handle("add-recent-workspace", (e, entry) => {
+  try {
+    let list = readRecentWorkspaces();
+    list = [entry, ...list.filter(w => w.path !== entry.path)].slice(0, 20);
+    writeRecentWorkspaces(list);
+    return true;
+  } catch { return false; }
+});
+
+ipcMain.handle("remove-recent-workspace", (e, workspacePath) => {
+  try {
+    writeRecentWorkspaces(readRecentWorkspaces().filter(w => w.path !== workspacePath));
+    return true;
+  } catch { return false; }
+});
+
+ipcMain.handle("clear-recent-workspaces", () => {
+  try { writeRecentWorkspaces([]); return true; } catch { return false; }
+});
+
+// Legacy: export workspace as a .noterws file (kept as optional export)
 ipcMain.handle("save-workspace", async (e, data) => {
   mainWindow.setAlwaysOnTop(false);
   let result;
   try {
     result = await dialog.showSaveDialog(mainWindow, {
-      title: "Save Workspace",
+      title: "Export Workspace File",
       defaultPath: "workspace.noterws",
       filters: [{ name: "Noter Workspace", extensions: ["noterws"] }],
     });
@@ -218,9 +334,7 @@ ipcMain.handle("save-workspace", async (e, data) => {
   try {
     fs.writeFileSync(result.filePath, JSON.stringify(data, null, 2), "utf8");
     return result.filePath;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 });
 
 ipcMain.handle("open-workspace", async () => {
@@ -239,9 +353,7 @@ ipcMain.handle("open-workspace", async () => {
   try {
     const raw = fs.readFileSync(result.filePaths[0], "utf-8");
     return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 });
 
 // ─── External Links ──────────────────────────────────────────────────────────
@@ -296,6 +408,97 @@ ipcMain.handle("terminal-get-cwd", async () => terminalCwd);
 ipcMain.handle("terminal-set-cwd", async (e, dir) => {
   if (dir && fs.existsSync(dir)) terminalCwd = dir;
   return terminalCwd;
+});
+
+// ─── PTY Terminal (xterm.js backend) ─────────────────────────────────────────
+ipcMain.handle("pty-create", (e, { cols = 80, rows = 24, cwd } = {}) => {
+  // Kill existing process cleanly
+  if (ptyProcess) {
+    try {
+      if (nodePty && ptyProcess.kill) ptyProcess.kill();
+      else ptyProcess.kill?.("SIGTERM");
+    } catch { /* ignore */ }
+    ptyProcess = null;
+  }
+
+  const { shell, args, env } = getShellConfig();
+  const startCwd = cwd || terminalCwd;
+
+  try {
+    if (nodePty) {
+      // Full PTY via node-pty
+      ptyProcess = nodePty.spawn(shell, args, {
+        name: "xterm-256color",
+        cols,
+        rows,
+        cwd: startCwd,
+        env,
+        useConpty: process.platform === "win32",
+      });
+
+      ptyProcess.onData((data) => {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send("pty-data", data);
+      });
+
+      ptyProcess.onExit(({ exitCode }) => {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send("pty-exit", exitCode);
+        ptyProcess = null;
+      });
+    } else {
+      // Spawn fallback (streaming stdout/stderr, no real PTY)
+      ptyProcess = spawn(shell, args, {
+        cwd: startCwd,
+        env,
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: false,
+      });
+
+      const fwd = (data) => {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send("pty-data", data.toString());
+      };
+
+      ptyProcess.stdout.on("data", fwd);
+      ptyProcess.stderr.on("data", fwd);
+      ptyProcess.on("exit", (code) => {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send("pty-exit", code ?? 0);
+        ptyProcess = null;
+      });
+      ptyProcess.on("error", () => { ptyProcess = null; });
+    }
+
+    const shellBasename = path.basename(shell).replace(/\.exe$/i, "");
+    return { success: true, shell: shellBasename, pty: !!nodePty };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.on("pty-write", (e, data) => {
+  if (!ptyProcess) return;
+  try {
+    if (nodePty && ptyProcess.write) ptyProcess.write(data);
+    else ptyProcess.stdin?.write(data);
+  } catch { /* ignore dead process */ }
+});
+
+ipcMain.handle("pty-resize", (e, { cols, rows }) => {
+  if (!ptyProcess) return;
+  try {
+    if (nodePty && ptyProcess.resize) ptyProcess.resize(cols, rows);
+  } catch { /* ignore */ }
+});
+
+ipcMain.handle("pty-kill", () => {
+  if (!ptyProcess) return;
+  try {
+    if (nodePty && ptyProcess.kill) ptyProcess.kill();
+    else ptyProcess.kill?.("SIGTERM");
+  } catch { /* ignore */ }
+  ptyProcess = null;
 });
 
 // ─── Project Structure Creator ───────────────────────────────────────────────

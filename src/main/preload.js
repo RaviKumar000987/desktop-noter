@@ -24,10 +24,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // ── External links ───────────────────────────────────────────
   openExternal:   (url)           => ipcRenderer.invoke("open-external", url),
 
-  // ── Terminal ─────────────────────────────────────────────────
+  // ── Terminal (legacy exec) ────────────────────────────────────
   terminalExec:   (command)       => ipcRenderer.invoke("terminal-exec", command),
   terminalGetCwd: ()              => ipcRenderer.invoke("terminal-get-cwd"),
   terminalSetCwd: (dir)           => ipcRenderer.invoke("terminal-set-cwd", dir),
+
+  // ── PTY Terminal (xterm.js) ───────────────────────────────────
+  ptyCreate:  (opts)  => ipcRenderer.invoke("pty-create", opts),
+  ptyWrite:   (data)  => ipcRenderer.send("pty-write", data),
+  ptyResize:  (opts)  => ipcRenderer.invoke("pty-resize", opts),
+  ptyKill:    ()      => ipcRenderer.invoke("pty-kill"),
+  onPtyData:  (cb)    => ipcRenderer.on("pty-data",  (_e, d) => cb(d)),
+  onPtyExit:  (cb)    => ipcRenderer.on("pty-exit",  (_e, c) => cb(c)),
+  offPtyData: ()      => ipcRenderer.removeAllListeners("pty-data"),
+  offPtyExit: ()      => ipcRenderer.removeAllListeners("pty-exit"),
 
   // ── Global Search ────────────────────────────────────────────
   globalSearch:          (opts)   => ipcRenderer.invoke("global-search", opts),
@@ -60,4 +70,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // ── Quick Open — workspace file listing ──────────────────────
   listWorkspaceFiles: (rootPath) => ipcRenderer.invoke("list-workspace-files", rootPath),
+
+  // ── Workspace Metadata (noter.workspace inside workspace folder) ──
+  workspaceReadMeta:     (folderPath)        => ipcRenderer.invoke("workspace-read-meta", folderPath),
+  workspaceWriteMeta:    (folderPath, data)  => ipcRenderer.invoke("workspace-write-meta", folderPath, data),
+
+  // ── Recent Workspaces (stored in %APPDATA%/Noter/) ────────────
+  getRecentWorkspaces:   ()                  => ipcRenderer.invoke("get-recent-workspaces"),
+  addRecentWorkspace:    (entry)             => ipcRenderer.invoke("add-recent-workspace", entry),
+  removeRecentWorkspace: (workspacePath)     => ipcRenderer.invoke("remove-recent-workspace", workspacePath),
+  clearRecentWorkspaces: ()                  => ipcRenderer.invoke("clear-recent-workspaces"),
 });

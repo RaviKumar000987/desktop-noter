@@ -1,7 +1,7 @@
 {
-  "name": "entering",
-  "version": "1.0.0",
-  "main": "main.js",
+  "name": "noter",
+  "version": "2.0.0",
+  "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "live": "electronmon .",
@@ -20,7 +20,12 @@
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1",
     "electronmon": "^2.0.4",
-    "monaco-editor": "^0.55.1"
+    "monaco-editor": "^0.55.1",
+    "xterm": "4.19.0",
+    "xterm-addon-fit": "0.6.0"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.0.0"
   },
   "build": {
     "appId": "com.sparrow.editor",

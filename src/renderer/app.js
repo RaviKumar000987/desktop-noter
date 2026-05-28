@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 // ─── Monaco Loader config (must run before require calls) ───────
-require.config({ paths: { vs: "./node_modules/monaco-editor/min/vs" } });
+require.config({ paths: { vs: "../../node_modules/monaco-editor/min/vs" } });
 
 // ─── Settings & runtime state ───────────────────────────────────
 let editorFontSize   = 18;
@@ -108,6 +108,9 @@ const TabManager = {
   tabs:     [],
   activeId: null,
   _uid:     1,
+  // When true, TabManager.close() will not auto-create a blank tab when the last
+  // tab is closed. Set to true during workspace/session restoration flows.
+  _suppressAutoBlank: false,
 
   /**
    * Create a new tab with its own Monaco model.
@@ -170,6 +173,7 @@ const TabManager = {
     updateExplorerActiveFile();
     saveSessionState();
     if (typeof SplitEditor !== "undefined") SplitEditor.syncWithTab(tab);
+    document.dispatchEvent(new CustomEvent("tab-language-changed", { detail: { language: tab.language } }));
   },
 
   /** Close a tab (prompts if unsaved). Returns true if closed. */
@@ -191,10 +195,13 @@ const TabManager = {
       const next = this.tabs[idx] || this.tabs[idx - 1];
       if (next) {
         this.activate(next.id);
-      } else {
-        // No tabs left — create a blank one
+      } else if (!this._suppressAutoBlank) {
+        // No tabs left and not in a bulk restore — create a blank tab
         const blank = this.create();
         this.activate(blank.id);
+      } else {
+        this.activeId = null;
+        renderTabs();
       }
     }
 
@@ -304,6 +311,88 @@ const TabDnD = (() => {
   return { onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd };
 })();
 
+// ── Tab context menu ──────────────────────────────────────────
+function showTabContextMenu(tab, x, y) {
+  // Lazy-reference ContextMenu (loaded by context-menu.js after us)
+  const CM = window.ContextMenu || (typeof ContextMenu !== "undefined" ? ContextMenu : null);
+  if (!CM) return;
+
+  const items = [
+    {
+      icon: "✕",
+      label: "Close Tab",
+      shortcut: "Ctrl+W",
+      action: () => TabManager.close(tab.id),
+    },
+    {
+      icon: "✕",
+      label: "Close Others",
+      action: () => {
+        const others = TabManager.tabs.filter(t => t.id !== tab.id).map(t => t.id);
+        others.forEach(id => TabManager.close(id, false));
+      },
+    },
+    {
+      icon: "✕",
+      label: "Close All",
+      action: () => {
+        const ids = TabManager.tabs.map(t => t.id);
+        ids.forEach(id => TabManager.close(id, false));
+      },
+    },
+    { separator: true },
+  ];
+
+  if (tab.filePath) {
+    items.push(
+      {
+        icon: "💾",
+        label: "Save",
+        shortcut: "Ctrl+S",
+        action: () => { TabManager.activate(tab.id); actions.saveFile(); },
+      },
+      {
+        icon: "💾",
+        label: "Save As…",
+        action: () => { TabManager.activate(tab.id); actions.saveAsFile(); },
+      },
+      { separator: true },
+      {
+        icon: "⎘",
+        label: "Copy Path",
+        action: () => navigator.clipboard.writeText(tab.filePath),
+      },
+      {
+        icon: "⎘",
+        label: "Copy Relative Path",
+        action: () => {
+          const root = explorerState.rootPath || "";
+          const rel  = tab.filePath.startsWith(root)
+            ? tab.filePath.slice(root.length).replace(/^[/\\]/, "")
+            : tab.filePath;
+          navigator.clipboard.writeText(rel);
+        },
+      },
+      {
+        icon: "⊢",
+        label: "Reveal in Explorer",
+        action: () => window.electronAPI.shellReveal(tab.filePath),
+      },
+      { separator: true },
+      {
+        icon: "⊟",
+        label: "Open to Side",
+        action: () => {
+          TabManager.activate(tab.id);
+          if (typeof SplitEditor !== "undefined") SplitEditor.open();
+        },
+      },
+    );
+  }
+
+  CM.show(items, x, y);
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  RENDER TABS
 // ═══════════════════════════════════════════════════════════════
@@ -346,6 +435,13 @@ function renderTabs() {
     // Middle-click → close
     el.addEventListener("mousedown", (e) => {
       if (e.button === 1) { e.preventDefault(); TabManager.close(tab.id); }
+    });
+
+    // Right-click → tab context menu
+    el.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showTabContextMenu(tab, e.clientX, e.clientY);
     });
 
     // Drag & Drop reordering
@@ -634,6 +730,80 @@ window.electronAPI?.onFileExternalChange?.((filePath) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+//  WORKSPACE MANAGER
+//  Manages noter.workspace metadata file inside the workspace
+//  folder and the global recent-workspaces list.
+// ═══════════════════════════════════════════════════════════════
+const WorkspaceManager = (() => {
+  let _path = null;
+  let _saveTimer = null;
+
+  function getCurrentPath() { return _path; }
+
+  // Set current path without writing (used during session restore)
+  function setCurrentPath(p) { _path = p; }
+
+  function _buildMeta() {
+    const tabs = TabManager.tabs
+      .map(t => {
+        if (!t.filePath) {
+          const content = t.model?.getValue() || "";
+          if (!content.trim() && !t.isModified) return null;
+          return {
+            filePath: null,
+            isActive: t.id === TabManager.activeId,
+            untitledContent: content,
+            language: t.language,
+          };
+        }
+        return { filePath: t.filePath, isActive: t.id === TabManager.activeId };
+      })
+      .filter(Boolean);
+
+    return {
+      version: 2,
+      name: _path ? basename(_path) : "Workspace",
+      path: _path,
+      lastOpenedAt: new Date().toISOString(),
+      tabs,
+      explorer: { expandedPaths: [...explorerState.expandedPaths] },
+      ui: { sidebarVisible, sidebarWidth },
+      editor: { fontSize: editorFontSize, wordWrap: wordWrapEnabled },
+    };
+  }
+
+  // Debounced write to noter.workspace file
+  function scheduleSave() {
+    if (!_path) return;
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(async () => {
+      if (!_path) return;
+      await window.electronAPI.workspaceWriteMeta(_path, _buildMeta());
+    }, 1000);
+  }
+
+  // Immediately write workspace file + update recent workspaces list
+  async function activate(folderPath, extra = {}) {
+    _path = folderPath;
+    const entry = {
+      name: extra.name || basename(folderPath),
+      path: folderPath,
+      lastOpenedAt: new Date().toISOString(),
+      template: extra.template || null,
+    };
+    await window.electronAPI.addRecentWorkspace(entry);
+    await window.electronAPI.workspaceWriteMeta(folderPath, _buildMeta());
+  }
+
+  function deactivate() {
+    _path = null;
+    clearTimeout(_saveTimer);
+  }
+
+  return { getCurrentPath, setCurrentPath, scheduleSave, activate, deactivate };
+})();
+
+// ═══════════════════════════════════════════════════════════════
 //  SIDEBAR / EXPLORER
 // ═══════════════════════════════════════════════════════════════
 const explorerState = {
@@ -714,6 +884,98 @@ async function loadExplorerChildren(dirPath, container, depth) {
   }
 }
 
+// ── Explorer Drag & Drop state ────────────────────────────────
+const ExplorerDnD = (() => {
+  let dragPath = null;
+  let dragType = null; // "file" | "directory"
+  let dropTarget = null;
+
+  function clearHighlights() {
+    document.querySelectorAll(".explorer-row.dnd-over").forEach(r => r.classList.remove("dnd-over"));
+    document.querySelectorAll(".explorer-row.dnd-over-file").forEach(r => r.classList.remove("dnd-over-file"));
+  }
+
+  function getDropDir(row) {
+    const isFolder = !!row.querySelector(".explorer-toggle");
+    if (isFolder) return row.dataset.path;
+    const p = row.dataset.path;
+    const sep = p.includes("\\") ? "\\" : "/";
+    return p.substring(0, p.lastIndexOf(sep));
+  }
+
+  function onDragStart(e, path, type) {
+    dragPath = path;
+    dragType = type;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", path);
+    e.currentTarget.style.opacity = "0.5";
+  }
+
+  function onDragEnd(e) {
+    dragPath = null;
+    dragType = null;
+    e.currentTarget.style.opacity = "";
+    clearHighlights();
+  }
+
+  function onDragOver(e, row) {
+    if (!dragPath) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    clearHighlights();
+    const isFolder = !!row.querySelector(".explorer-toggle");
+    row.classList.add(isFolder ? "dnd-over" : "dnd-over-file");
+    dropTarget = row;
+  }
+
+  function onDragLeave(e, row) {
+    row.classList.remove("dnd-over", "dnd-over-file");
+  }
+
+  async function onDrop(e, row) {
+    e.preventDefault();
+    clearHighlights();
+    if (!dragPath) return;
+
+    const destDir = getDropDir(row);
+    const sep = dragPath.includes("\\") ? "\\" : "/";
+    const name = dragPath.split(sep).pop();
+    const newPath = destDir + sep + name;
+
+    if (newPath === dragPath) return;
+    if (newPath.startsWith(dragPath + sep)) {
+      showToast("Cannot move a folder into itself", "error");
+      return;
+    }
+
+    const ok = await window.electronAPI.fsRename(dragPath, newPath);
+    if (ok) {
+      // Update open tabs
+      TabManager.tabs.forEach(t => {
+        if (t.filePath === dragPath) {
+          t.filePath = newPath;
+          t.title = basename(newPath);
+          t.language = getLang(newPath);
+          if (typeof monaco !== "undefined") monaco.editor.setModelLanguage(t.model, t.language);
+        } else if (t.filePath && t.filePath.startsWith(dragPath + sep)) {
+          t.filePath = newPath + t.filePath.slice(dragPath.length);
+          t.title = basename(t.filePath);
+        }
+      });
+      renderTabs();
+      updateStatusBar();
+      updateTitleBar();
+      refreshExplorer();
+      showToast(`Moved: ${name}`, "success");
+    } else {
+      showToast("Move failed", "error");
+    }
+    dragPath = null;
+  }
+
+  return { onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop };
+})();
+
 function createExplorerItem(entry, depth) {
   const wrapper = document.createElement("div");
 
@@ -722,6 +984,7 @@ function createExplorerItem(entry, depth) {
     const row = document.createElement("div");
     row.className = "explorer-row";
     row.dataset.path = entry.path;
+    row.draggable = true;
     row.innerHTML =
       `<span class="explorer-indent" style="width:${depth * 16 + 6}px"></span>` +
       `<span class="explorer-toggle">▶</span>` +
@@ -752,6 +1015,13 @@ function createExplorerItem(entry, depth) {
       }
     });
 
+    // DnD — directory can be dragged AND is a drop target
+    row.addEventListener("dragstart",  (e) => ExplorerDnD.onDragStart(e, entry.path, "directory"));
+    row.addEventListener("dragend",    (e) => ExplorerDnD.onDragEnd(e));
+    row.addEventListener("dragover",   (e) => ExplorerDnD.onDragOver(e, row));
+    row.addEventListener("dragleave",  (e) => ExplorerDnD.onDragLeave(e, row));
+    row.addEventListener("drop",       (e) => ExplorerDnD.onDrop(e, row));
+
     wrapper.appendChild(row);
     wrapper.appendChild(childrenContainer);
 
@@ -761,12 +1031,21 @@ function createExplorerItem(entry, depth) {
     const row   = document.createElement("div");
     row.className = "explorer-row";
     row.dataset.path = entry.path;
+    row.draggable = true;
     row.innerHTML =
       `<span class="explorer-indent" style="width:${depth * 16 + 22}px"></span>` +
       `<span class="explorer-file-icon" style="color:${color}">◦</span>` +
       `<span class="explorer-name" style="color:${color}">${entry.name}</span>`;
 
     row.addEventListener("click", () => openFileFromExplorer(entry.path));
+
+    // DnD — file can be dragged and dropped onto folders
+    row.addEventListener("dragstart",  (e) => ExplorerDnD.onDragStart(e, entry.path, "file"));
+    row.addEventListener("dragend",    (e) => ExplorerDnD.onDragEnd(e));
+    row.addEventListener("dragover",   (e) => ExplorerDnD.onDragOver(e, row));
+    row.addEventListener("dragleave",  (e) => ExplorerDnD.onDragLeave(e, row));
+    row.addEventListener("drop",       (e) => ExplorerDnD.onDrop(e, row));
+
     wrapper.appendChild(row);
   }
 
@@ -916,19 +1195,35 @@ let _sessionTimer = null;
 function saveSessionState() {
   clearTimeout(_sessionTimer);
   _sessionTimer = setTimeout(() => {
+    // Build tab list: skip empty untitled tabs so they don't pollute future sessions.
+    // Untitled tabs with actual content are saved with their content so they survive restarts.
+    const tabs = TabManager.tabs
+      .map(t => {
+        if (!t.filePath) {
+          const content = t.model?.getValue() || "";
+          if (!content.trim() && !t.isModified) return null; // skip empty untitled
+          return {
+            filePath: null,
+            isActive: t.id === TabManager.activeId,
+            untitledContent: content,
+            language: t.language,
+          };
+        }
+        return { filePath: t.filePath, isActive: t.id === TabManager.activeId };
+      })
+      .filter(Boolean);
+
     const state = {
-      explorerPath:    explorerState.rootPath,
-      expandedPaths:   [...explorerState.expandedPaths],
+      explorerPath:  explorerState.rootPath,
+      expandedPaths: [...explorerState.expandedPaths],
       sidebarVisible,
       sidebarWidth,
-      fontSize:        editorFontSize,
-      wordWrap:        wordWrapEnabled,
-      tabs: TabManager.tabs.map(t => ({
-        filePath: t.filePath,
-        isActive: t.id === TabManager.activeId,
-      })),
+      fontSize:      editorFontSize,
+      wordWrap:      wordWrapEnabled,
+      tabs,
     };
     localStorage.setItem("noterSession", JSON.stringify(state));
+    WorkspaceManager.scheduleSave();
   }, 500);
 }
 
@@ -960,9 +1255,17 @@ async function restoreSessionState() {
     if (s.explorerPath) {
       explorerState.expandedPaths = new Set(s.expandedPaths || []);
       await openExplorerFolder(s.explorerPath);
+      // Register this workspace path so future saves write the workspace file
+      WorkspaceManager.setCurrentPath(s.explorerPath);
+      window.electronAPI.addRecentWorkspace({
+        name: basename(s.explorerPath),
+        path: s.explorerPath,
+        lastOpenedAt: new Date().toISOString(),
+      });
     }
 
-    // Restore tabs
+    // Restore tabs — suppress auto-blank while restoring
+    TabManager._suppressAutoBlank = true;
     let restoredAny = false;
     if (Array.isArray(s.tabs) && s.tabs.length > 0) {
       for (const t of s.tabs) {
@@ -971,17 +1274,22 @@ async function restoreSessionState() {
           if (file) {
             const tab = TabManager.create(file.filePath, file.content, getLang(file.filePath));
             if (t.isActive) { TabManager.activate(tab.id); restoredAny = true; }
+            window.electronAPI?.watchFile?.(t.filePath);
           }
         } else {
-          const tab = TabManager.create();
+          // Restore untitled tab with its saved content
+          const content = t.untitledContent || "";
+          const lang    = t.language || "plaintext";
+          const tab = TabManager.create(null, content, lang);
           if (t.isActive) { TabManager.activate(tab.id); restoredAny = true; }
         }
       }
-      // Activate first tab if none was marked active
       if (!restoredAny && TabManager.tabs.length > 0) {
         TabManager.activate(TabManager.tabs[0].id);
+        restoredAny = true;
       }
     }
+    TabManager._suppressAutoBlank = false;
 
     return TabManager.tabs.length > 0;
   } catch (err) {
@@ -1214,10 +1522,12 @@ async function createWorkspace() {
 
   // ── 2. Show template / language selection modal ─────────────
   const selectedTemplate = await showProjectTemplateModal();
-  if (selectedTemplate === null) return;    // user cancelled
+  if (selectedTemplate === null) return;
 
-  // ── 3. Wipe current state ───────────────────────────────────
+  // ── 3. Wipe current state (no auto-blank tab during reset) ──
+  TabManager._suppressAutoBlank = true;
   TabManager.closeAll(true);
+  WorkspaceManager.deactivate();
 
   explorerState.rootPath = null;
   explorerState.expandedPaths = new Set();
@@ -1236,111 +1546,270 @@ async function createWorkspace() {
 
   // ── 4. Pick a root folder for the workspace ─────────────────
   const folderPath = await window.electronAPI.openFolder();
+  TabManager._suppressAutoBlank = false;
 
-  if (folderPath) {
-    // ── 5. Create project files ─────────────────────────────────
-    const result = await window.electronAPI.createProjectStructure({
-      folderPath,
-      files:        selectedTemplate.files,
-      setupCommand: selectedTemplate.setup || null,
-    });
-
-    if (result.success) {
-      let msg = `${selectedTemplate.label} project ready · ${result.filesCreated} files created`;
-      if (result.setupDone)        msg += " · environment setup done ✓";
-      else if (result.setupError)  msg += " · (run setup manually)";
-      showToast(msg, "success", 4500);
-
-      if (selectedTemplate.hint) {
-        setTimeout(() => showToast(selectedTemplate.hint, "info", 5000), 4600);
-      }
-    } else {
-      showToast("Could not create project files: " + (result.error || "unknown error"), "error");
-    }
-
-    await openExplorerFolder(folderPath);
+  if (!folderPath) {
+    // User cancelled — restore a blank editing state
+    const tab = TabManager.create();
+    TabManager.activate(tab.id);
+    return;
   }
 
-  // ── 6. Start with a blank tab ────────────────────────────────
-  const tab = TabManager.create();
-  TabManager.activate(tab.id);
+  // ── 5. Create project files ─────────────────────────────────
+  const result = await window.electronAPI.createProjectStructure({
+    folderPath,
+    files:        selectedTemplate.files,
+    setupCommand: selectedTemplate.setup || null,
+  });
 
-  // ── 7. Save the workspace file ───────────────────────────────
-  const wsData = {
-    version:      1,
-    explorerPath: explorerState.rootPath,
-    tabs:         [],
-    settings:     { fontSize: editorFontSize, wordWrap: wordWrapEnabled },
-  };
-
-  const wsPath = await window.electronAPI.saveWorkspace(wsData);
-
-  if (wsPath) {
-    showToast("Workspace saved: " + basename(wsPath), "success");
+  if (result.success) {
+    let msg = `${selectedTemplate.label} project ready · ${result.filesCreated} files created`;
+    if (result.setupDone)       msg += " · environment setup done ✓";
+    else if (result.setupError) msg += " · (run setup manually)";
+    showToast(msg, "success", 4500);
+    if (selectedTemplate.hint) setTimeout(() => showToast(selectedTemplate.hint, "info", 5000), 4600);
   } else {
-    showToast("New workspace ready", "info");
+    showToast("Could not create project files: " + (result.error || "unknown error"), "error");
   }
 
+  // ── 6. Open the folder in explorer ─────────────────────────
+  await openExplorerFolder(folderPath);
+
+  // ── 7. Auto-create noter.workspace file + add to recent list ──
+  await WorkspaceManager.activate(folderPath, { template: selectedTemplate.id });
+
+  // ── 8. Open the main entry-point file for this template ─────
+  const sep = folderPath.includes("\\") ? "\\" : "/";
+  const mainFile = selectedTemplate.files.find(f => !f.path.includes("/")) || selectedTemplate.files[0];
+  if (mainFile) {
+    const absPath = folderPath + sep + mainFile.path.replace(/\//g, sep);
+    await openFileFromExplorer(absPath);
+  } else {
+    const tab = TabManager.create();
+    TabManager.activate(tab.id);
+  }
+
+  showToast(`Workspace: ${basename(folderPath)}`, "info", 2000);
   window.editor?.focus();
 }
 
 async function saveWorkspace() {
-  const data = {
-    version:      1,
-    explorerPath: explorerState.rootPath,
-    tabs: TabManager.tabs.map(t => ({
-      filePath: t.filePath,
-      isActive: t.id === TabManager.activeId,
-    })),
-    settings: { fontSize: editorFontSize, wordWrap: wordWrapEnabled },
-  };
-
-  const wsPath = await window.electronAPI.saveWorkspace(data);
-  if (wsPath) showToast("Workspace saved: " + basename(wsPath), "success");
-  else        showToast("Workspace save cancelled", "info");
+  // Save workspace state to noter.workspace in the current workspace folder
+  const wsPath = WorkspaceManager.getCurrentPath();
+  if (!wsPath) {
+    showToast("No workspace active. Open a folder first.", "info");
+    closeAllMenus();
+    return;
+  }
+  const ok = await window.electronAPI.workspaceWriteMeta(wsPath, _buildWorkspaceMeta());
+  if (ok) showToast("Workspace saved", "success");
+  else    showToast("Workspace save failed", "error");
   closeAllMenus();
 }
 
+// Shared meta builder for saveWorkspace (mirrors WorkspaceManager._buildMeta but accessible here)
+function _buildWorkspaceMeta() {
+  const tabs = TabManager.tabs
+    .map(t => {
+      if (!t.filePath) {
+        const content = t.model?.getValue() || "";
+        if (!content.trim() && !t.isModified) return null;
+        return { filePath: null, isActive: t.id === TabManager.activeId, untitledContent: content, language: t.language };
+      }
+      return { filePath: t.filePath, isActive: t.id === TabManager.activeId };
+    })
+    .filter(Boolean);
+
+  const wsPath = WorkspaceManager.getCurrentPath();
+  return {
+    version: 2,
+    name: wsPath ? basename(wsPath) : "Workspace",
+    path: wsPath,
+    lastOpenedAt: new Date().toISOString(),
+    tabs,
+    explorer: { expandedPaths: [...explorerState.expandedPaths] },
+    ui: { sidebarVisible, sidebarWidth },
+    editor: { fontSize: editorFontSize, wordWrap: wordWrapEnabled },
+  };
+}
+
 async function openWorkspace() {
-  const data = await window.electronAPI.openWorkspace();
-  if (!data) { closeAllMenus(); return; }
+  // Show the recent-workspaces overlay (replaces the old .noterws file picker)
+  closeAllMenus();
+  await showRecentWorkspacesOverlay();
+}
 
-  // Close all current tabs
+// ═══════════════════════════════════════════════════════════════
+//  WORKSPACE OPEN HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Show the "Open Workspace" overlay with the recent-workspaces list.
+ * Each entry lets the user click to restore the full workspace state.
+ * An "Open Folder…" button lets the user browse for any folder.
+ */
+async function showRecentWorkspacesOverlay() {
+  const recents = await window.electronAPI.getRecentWorkspaces();
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.id = "ws-overlay";
+
+    function buildListHTML(list) {
+      if (!list.length) {
+        return `<div class="ws-empty">No recent workspaces.<br>Open a folder to get started.</div>`;
+      }
+      return list.map((ws, i) => {
+        const name = ws.name || basename(ws.path);
+        const date = ws.lastOpenedAt
+          ? new Date(ws.lastOpenedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+          : "";
+        const safePath = ws.path.replace(/&/g,"&amp;").replace(/"/g,"&quot;");
+        return `
+          <div class="ws-item" data-idx="${i}" data-path="${safePath}">
+            <div class="ws-item-icon">📁</div>
+            <div class="ws-item-info">
+              <div class="ws-item-name">${name}</div>
+              <div class="ws-item-path">${ws.path}</div>
+              ${date ? `<div class="ws-item-date">Last opened ${date}</div>` : ""}
+            </div>
+            <button class="ws-item-remove" data-path="${safePath}" title="Remove from list">×</button>
+          </div>`;
+      }).join("");
+    }
+
+    const hasClear = recents.length > 0;
+    overlay.innerHTML = `
+      <div id="ws-modal">
+        <div id="ws-modal-header">
+          <h2>Open Workspace</h2>
+          <p>Select a recent workspace or open a folder</p>
+        </div>
+        <div id="ws-modal-list">${buildListHTML(recents)}</div>
+        <div id="ws-modal-footer">
+          <button id="ws-open-folder-btn" class="ws-btn ws-btn-primary">Open Folder…</button>
+          ${hasClear ? `<button id="ws-clear-btn" class="ws-btn ws-btn-danger">Clear Recent</button>` : ""}
+          <button id="ws-cancel-btn" class="ws-btn">Cancel</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    function dismiss() { overlay.remove(); resolve(); }
+
+    // Click on a workspace entry
+    overlay.querySelectorAll(".ws-item").forEach(el => {
+      el.addEventListener("click", async (e) => {
+        if (e.target.classList.contains("ws-item-remove")) return;
+        dismiss();
+        await loadWorkspaceFromFolder(el.dataset.path);
+      });
+    });
+
+    // Remove individual entry
+    overlay.querySelectorAll(".ws-item-remove").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await window.electronAPI.removeRecentWorkspace(btn.dataset.path);
+        btn.closest(".ws-item").remove();
+        const listEl = overlay.querySelector("#ws-modal-list");
+        if (!listEl.querySelector(".ws-item")) {
+          listEl.innerHTML = `<div class="ws-empty">No recent workspaces.<br>Open a folder to get started.</div>`;
+          overlay.querySelector("#ws-clear-btn")?.remove();
+        }
+      });
+    });
+
+    // Open folder browser
+    document.getElementById("ws-open-folder-btn").addEventListener("click", async () => {
+      dismiss();
+      const folderPath = await window.electronAPI.openFolder();
+      if (folderPath) await openFolderAsWorkspace(folderPath);
+    });
+
+    // Clear all recent
+    document.getElementById("ws-clear-btn")?.addEventListener("click", async () => {
+      await window.electronAPI.clearRecentWorkspaces();
+      overlay.querySelector("#ws-modal-list").innerHTML =
+        `<div class="ws-empty">No recent workspaces.<br>Open a folder to get started.</div>`;
+      document.getElementById("ws-clear-btn")?.remove();
+    });
+
+    // Cancel
+    document.getElementById("ws-cancel-btn").addEventListener("click", dismiss);
+    overlay.addEventListener("mousedown", e => { if (e.target === overlay) dismiss(); });
+
+    const onKey = e => { if (e.key === "Escape") { document.removeEventListener("keydown", onKey); dismiss(); } };
+    document.addEventListener("keydown", onKey);
+  });
+}
+
+/**
+ * Restore a workspace in full from its noter.workspace file.
+ * Closes all current tabs, applies saved settings, reopens saved tabs.
+ */
+async function loadWorkspaceFromFolder(folderPath) {
+  const meta = await window.electronAPI.workspaceReadMeta(folderPath);
+
+  // ── Close current state ──────────────────────────────────────
+  TabManager._suppressAutoBlank = true;
   TabManager.closeAll(true);
+  WorkspaceManager.deactivate();
 
-  // Apply settings
-  if (data.settings) {
-    if (data.settings.fontSize) {
-      editorFontSize = data.settings.fontSize;
+  // ── Apply settings from meta ─────────────────────────────────
+  if (meta) {
+    if (meta.editor?.fontSize) {
+      editorFontSize = meta.editor.fontSize;
       window.editor?.updateOptions({ fontSize: editorFontSize });
       updateZoomStatus();
     }
-    if (data.settings.wordWrap !== undefined) {
-      wordWrapEnabled = data.settings.wordWrap;
+    if (meta.editor?.wordWrap !== undefined) {
+      wordWrapEnabled = meta.editor.wordWrap;
       window.editor?.updateOptions({ wordWrap: wordWrapEnabled ? "on" : "off" });
       updateWrapStatus();
     }
-  }
-
-  // Restore explorer
-  if (data.explorerPath) await openExplorerFolder(data.explorerPath);
-
-  // Restore tabs
-  let anyActive = false;
-  if (Array.isArray(data.tabs)) {
-    for (const t of data.tabs) {
-      if (t.filePath) {
-        const file = await window.electronAPI.openFileByPath(t.filePath);
-        if (file) {
-          const tab = TabManager.create(file.filePath, file.content, getLang(file.filePath));
-          if (t.isActive) { TabManager.activate(tab.id); anyActive = true; }
-        }
-      } else {
-        const tab = TabManager.create();
-        if (t.isActive) { TabManager.activate(tab.id); anyActive = true; }
-      }
+    if (meta.ui?.sidebarVisible !== undefined) sidebarVisible = meta.ui.sidebarVisible;
+    if (meta.ui?.sidebarWidth)   sidebarWidth = meta.ui.sidebarWidth;
+    if (meta.explorer?.expandedPaths) {
+      explorerState.expandedPaths = new Set(meta.explorer.expandedPaths);
     }
   }
+
+  // ── Open folder in explorer ──────────────────────────────────
+  await openExplorerFolder(folderPath);
+
+  // ── Apply sidebar state ──────────────────────────────────────
+  const sidebar = document.getElementById("sidebar");
+  const handle  = document.getElementById("resize-handle");
+  if (!sidebarVisible) {
+    sidebar.classList.add("hidden");
+    if (handle) handle.style.display = "none";
+  } else {
+    sidebar.classList.remove("hidden");
+    sidebar.style.width = sidebarWidth + "px";
+    if (handle) handle.style.display = "";
+  }
+
+  // ── Restore tabs ─────────────────────────────────────────────
+  let anyActive = false;
+  const tabsToRestore = meta?.tabs || [];
+
+  for (const t of tabsToRestore) {
+    if (t.filePath) {
+      const file = await window.electronAPI.openFileByPath(t.filePath);
+      if (file) {
+        const tab = TabManager.create(file.filePath, file.content, getLang(file.filePath));
+        if (t.isActive) { TabManager.activate(tab.id); anyActive = true; }
+        window.electronAPI?.watchFile?.(t.filePath);
+      }
+    } else {
+      const content = t.untitledContent || "";
+      const tab = TabManager.create(null, content, t.language || "plaintext");
+      if (t.isActive) { TabManager.activate(tab.id); anyActive = true; }
+    }
+  }
+
+  TabManager._suppressAutoBlank = false;
 
   if (!anyActive) {
     if (TabManager.tabs.length > 0) TabManager.activate(TabManager.tabs[0].id);
@@ -1348,8 +1817,35 @@ async function openWorkspace() {
   }
 
   renderTabs();
-  showToast("Workspace loaded", "success");
-  closeAllMenus();
+
+  // ── Register workspace + write updated file ──────────────────
+  await WorkspaceManager.activate(folderPath, { name: meta?.name || basename(folderPath) });
+
+  showToast(`Workspace loaded: ${basename(folderPath)}`, "success");
+  window.editor?.focus();
+}
+
+/**
+ * Open a folder as a workspace. Detects an existing noter.workspace
+ * file and offers to restore session state, or opens fresh.
+ */
+async function openFolderAsWorkspace(folderPath) {
+  const meta = await window.electronAPI.workspaceReadMeta(folderPath);
+
+  if (meta && meta.tabs && meta.tabs.length > 0) {
+    const restore = confirm(
+      `"${basename(folderPath)}" has a saved workspace.\n\nRestore previous session?`
+    );
+    if (restore) {
+      await loadWorkspaceFromFolder(folderPath);
+      return;
+    }
+  }
+
+  // Open fresh (no tab restoration)
+  await openExplorerFolder(folderPath);
+  await WorkspaceManager.activate(folderPath);
+  showToast(`Opened: ${basename(folderPath)}`, "success");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1403,7 +1899,7 @@ const actions = {
 
   async openFolder() {
     const folderPath = await window.electronAPI.openFolder();
-    if (folderPath) await openExplorerFolder(folderPath);
+    if (folderPath) await openFolderAsWorkspace(folderPath);
     closeAllMenus();
   },
 
@@ -1614,14 +2110,23 @@ document.getElementById("maximize").addEventListener("click", () => window.elect
 document.getElementById("close")   .addEventListener("click", () => window.electronAPI.close());
 
 // ── Sidebar controls ────────────────────────────────────────────
-document.getElementById("sidebar-toggle")       .addEventListener("click", () => toggleSidebar());
-document.getElementById("open-folder-btn")      .addEventListener("click", () => actions.openFolder());
-document.getElementById("open-folder-btn2")     .addEventListener("click", () => actions.openFolder());
-document.getElementById("refresh-explorer-btn") .addEventListener("click", () => refreshExplorer());
+document.getElementById("sidebar-toggle")           .addEventListener("click", () => toggleSidebar());
+document.getElementById("open-folder-btn")          .addEventListener("click", () => actions.openFolder());
+document.getElementById("open-folder-btn2")         .addEventListener("click", () => actions.openFolder());
+document.getElementById("refresh-explorer-btn")     .addEventListener("click", () => refreshExplorer());
+document.getElementById("remove-from-workspace-btn").addEventListener("click", () => {
+  if (typeof removeFromWorkspace === "function") removeFromWorkspace();
+});
 
 // ── New tab "+" button ──────────────────────────────────────────
 document.getElementById("new-tab-btn").addEventListener("click", () => {
   if (window.editor) actions.newFile();
+});
+
+// ── Status bar language click → change language mode ────────────
+document.getElementById("language")?.addEventListener("click", () => {
+  if (!window.editor) return;
+  window.editor.trigger("statusbar", "editor.action.changeLanguageMode", null);
 });
 
 // ── Horizontal scroll on tabs with mouse-wheel ──────────────────
@@ -1702,6 +2207,56 @@ document.addEventListener("keydown", (e) => {
 //  MONACO EDITOR INIT
 // ═══════════════════════════════════════════════════════════════
 require(["vs/editor/editor.main"], async () => {
+
+  // ── TypeScript / JavaScript language service configuration ──
+  monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: false,
+    noSyntaxValidation:   false,
+  });
+  monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+    target:                 monaco.languages.typescript.ScriptTarget.ES2020,
+    allowNonTsExtensions:   true,
+    moduleResolution:       monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+    module:                 monaco.languages.typescript.ModuleKind.CommonJS,
+    noEmit:                 true,
+    esModuleInterop:        true,
+    allowJs:                true,
+    jsx:                    monaco.languages.typescript.JsxEmit.React,
+    lib:                    ["ES2020", "DOM"],
+  });
+  monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+    noSemanticValidation: false,
+    noSyntaxValidation:   false,
+  });
+  monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+    target:                 monaco.languages.typescript.ScriptTarget.ES2020,
+    allowNonTsExtensions:   true,
+    moduleResolution:       monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+    module:                 monaco.languages.typescript.ModuleKind.CommonJS,
+    noEmit:                 true,
+    esModuleInterop:        true,
+    allowJs:                true,
+    jsx:                    monaco.languages.typescript.JsxEmit.React,
+    strict:                 true,
+    lib:                    ["ES2020", "DOM"],
+  });
+
+  // Extra lib: inject Node.js globals for JS files
+  monaco.languages.typescript.javascriptDefaults.addExtraLib(
+    `declare const require: (module: string) => any;
+     declare const module: { exports: any };
+     declare const __dirname: string;
+     declare const __filename: string;
+     declare const process: { env: Record<string, string | undefined>; argv: string[]; exit(code?: number): void; };
+     declare const Buffer: any;
+     declare function setTimeout(fn: Function, ms?: number): number;
+     declare function clearTimeout(id: number): void;
+     declare function setInterval(fn: Function, ms?: number): number;
+     declare function clearInterval(id: number): void;
+     declare function console: { log(...args: any[]): void; error(...args: any[]): void; warn(...args: any[]): void; };
+    `,
+    "ts:node-globals.d.ts"
+  );
 
   // ── Catppuccin Mocha theme ─────────────────────────────────
   monaco.editor.defineTheme("catppuccin-mocha", {
@@ -1851,11 +2406,36 @@ require(["vs/editor/editor.main"], async () => {
     // Multi-cursor
     multiCursorModifier: "ctrlCmd",
 
-    // Suggestions & intellisense
-    quickSuggestions:          { other: true, comments: false, strings: false },
-    suggestOnTriggerCharacters: true,
-    tabCompletion:              "on",
-    parameterHints:             { enabled: true, cycle: true },
+    // Suggestions & IntelliSense
+    quickSuggestions:           { other: true, comments: true, strings: true },
+    suggestOnTriggerCharacters:  true,
+    acceptSuggestionOnEnter:     "on",
+    tabCompletion:               "on",
+    wordBasedSuggestions:        "allDocuments",
+    parameterHints:              { enabled: true, cycle: true },
+    inlayHints:                  { enabled: "on" },
+    suggest: {
+      showKeywords:     true,
+      showSnippets:     true,
+      showClasses:      true,
+      showFunctions:    true,
+      showVariables:    true,
+      showModules:      true,
+      showProperties:   true,
+      showMethods:      true,
+      showColors:       true,
+      showFiles:        true,
+      showValues:       true,
+      showEnums:        true,
+      showReferences:   true,
+      filterGraceful:   true,
+      localityBonus:    true,
+      preview:          true,
+      showStatusBar:    true,
+    },
+    hover:          { enabled: true, delay: 300 },
+    inlineSuggest:  { enabled: true },
+    codeActionsOnSave: { "source.fixAll": "explicit" },
 
     // Render settings
     renderWhitespace:    "selection",
@@ -1930,9 +2510,10 @@ require(["vs/editor/editor.main"], async () => {
     });
   });
 
-  // ── Init: try session restore, else blank tab ────────────────
+  // ── Init: restore previous session, or open a blank tab ─────
   const restored = await restoreSessionState();
   if (!restored) {
+    // No saved session (or session had no meaningful tabs) — start blank
     const tab = TabManager.create();
     TabManager.activate(tab.id);
   }

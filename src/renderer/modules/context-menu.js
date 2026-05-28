@@ -413,6 +413,21 @@ function showFileContextMenu(filePath, x, y, row) {
         label: "Reveal in Explorer",
         action: () => window.electronAPI.shellReveal(filePath),
       },
+      ...(isRunnable(filePath) ? [
+        { separator: true },
+        {
+          icon: "▶",
+          label: "Run File",
+          shortcut: "Ctrl+Alt+N",
+          action: () => {
+            openFileFromExplorer(filePath).then ? openFileFromExplorer(filePath).then(() => {
+              if (typeof ExtensionRuntime !== "undefined") ExtensionRuntime.runCurrentFile();
+            }) : (() => {
+              if (typeof ExtensionRuntime !== "undefined") ExtensionRuntime.runCurrentFile();
+            })();
+          },
+        },
+      ] : []),
     ],
     x,
     y,
@@ -473,6 +488,26 @@ function showFolderContextMenu(folderPath, x, y, row) {
   );
 }
 
+// ── Remove current folder from workspace ─────────────────────
+function removeFromWorkspace() {
+  if (!explorerState.rootPath) return;
+  explorerState.rootPath = null;
+  explorerState.expandedPaths = new Set();
+
+  const noFolderMsg     = document.getElementById("no-folder-msg");
+  const explorerContent = document.getElementById("explorer-content");
+  const explorerTree    = document.getElementById("explorer-tree");
+  const folderNameEl    = document.getElementById("folder-name");
+
+  if (noFolderMsg)     noFolderMsg.style.display     = "";
+  if (explorerContent) explorerContent.style.display  = "none";
+  if (explorerTree)    explorerTree.innerHTML          = "";
+  if (folderNameEl)    folderNameEl.textContent        = "";
+
+  showToast("Folder removed from workspace", "info", 2000);
+  if (typeof saveSessionState === "function") saveSessionState();
+}
+
 // ── Build workspace / empty-space context menu ────────────────
 function showWorkspaceContextMenu(x, y) {
   if (!explorerState.rootPath) {
@@ -519,41 +554,142 @@ function showWorkspaceContextMenu(x, y) {
       },
       { separator: true },
       { icon: "💾", label: "Save Workspace", action: () => saveWorkspace() },
+      { separator: true },
+      {
+        icon: "⊗",
+        label: "Remove from Workspace",
+        danger: true,
+        action: () => removeFromWorkspace(),
+      },
     ],
     x,
     y,
   );
 }
 
+// ── File context menu — with Run Code + Format additions ──────
+// (override to add extra items for runnable file types)
+const RUNNABLE_EXTS = new Set(["js","ts","py","java","c","cpp","rs","go","sh","bash","jsx","tsx"]);
+
+function isRunnable(filePath) {
+  const ext = (filePath.split(".").pop() || "").toLowerCase();
+  return RUNNABLE_EXTS.has(ext);
+}
+
+// ── Editor right-click context menu ───────────────────────────
+function showEditorContextMenu(x, y) {
+  const tab = TabManager.getActive();
+  if (!window.editor) return;
+
+  const hasSelection = !window.editor.getSelection().isEmpty();
+
+  ContextMenu.show([
+    {
+      icon: "✂",
+      label: "Cut",
+      shortcut: "Ctrl+X",
+      disabled: !hasSelection,
+      action: () => window.editor.trigger("ctx","editor.action.clipboardCutAction",null),
+    },
+    {
+      icon: "⎘",
+      label: "Copy",
+      shortcut: "Ctrl+C",
+      action: () => window.editor.trigger("ctx","editor.action.clipboardCopyAction",null),
+    },
+    {
+      icon: "⊕",
+      label: "Paste",
+      shortcut: "Ctrl+V",
+      action: () => window.editor.trigger("ctx","editor.action.clipboardPasteAction",null),
+    },
+    { separator: true },
+    {
+      icon: "⌎",
+      label: "Select All",
+      shortcut: "Ctrl+A",
+      action: () => {
+        window.editor.setSelection(window.editor.getModel().getFullModelRange());
+        window.editor.focus();
+      },
+    },
+    { separator: true },
+    {
+      icon: "⌕",
+      label: "Find",
+      shortcut: "Ctrl+F",
+      action: () => window.editor.trigger("ctx","actions.find",null),
+    },
+    {
+      icon: "⌕",
+      label: "Find & Replace",
+      shortcut: "Ctrl+H",
+      action: () => window.editor.trigger("ctx","editor.action.startFindReplaceAction",null),
+    },
+    { separator: true },
+    {
+      icon: "⊞",
+      label: "Format Document",
+      shortcut: "Shift+Alt+F",
+      action: () => window.editor.trigger("ctx","editor.action.formatDocument",null),
+    },
+    {
+      icon: "↩",
+      label: "Comment / Uncomment",
+      shortcut: "Ctrl+/",
+      action: () => window.editor.trigger("ctx","editor.action.commentLine",null),
+    },
+    {
+      icon: "⊡",
+      label: "Rename Symbol",
+      shortcut: "F2",
+      action: () => window.editor.trigger("ctx","editor.action.rename",null),
+    },
+    { separator: true },
+    ...(tab?.filePath && isRunnable(tab.filePath) ? [{
+      icon: "▶",
+      label: "Run File",
+      shortcut: "Ctrl+Alt+N",
+      action: () => {
+        if (typeof ExtensionRuntime !== "undefined") ExtensionRuntime.runCurrentFile();
+        else showToast("Code Runner not loaded", "error");
+      },
+    }] : []),
+    ...(tab?.filePath ? [{
+      icon: "⎘",
+      label: "Copy File Path",
+      action: () => navigator.clipboard.writeText(tab.filePath),
+    }] : []),
+    {
+      icon: "⊟",
+      label: "Open Split Editor",
+      shortcut: "Ctrl+\\",
+      action: () => { if (typeof SplitEditor !== "undefined") SplitEditor.toggle(); },
+    },
+  ], x, y);
+}
+
 // ── Wire up right-click on the full sidebar ───────────────────
-// Scripts load at bottom of <body> so DOM is ready — no DOMContentLoaded needed
 (function () {
   const sidebar = document.getElementById("sidebar");
   if (!sidebar) return;
 
   sidebar.addEventListener("contextmenu", (e) => {
-    // Don't intercept right-clicks inside search panel
     if (e.target.closest("#search-panel")) return;
-
     e.preventDefault();
     e.stopPropagation();
 
-    // Find the closest explorer row
     const row = e.target.closest(".explorer-row[data-path]");
     if (row) {
       const entryPath = row.dataset.path;
-      const isFolder = !!row.querySelector(".explorer-toggle");
-      if (isFolder) {
-        showFolderContextMenu(entryPath, e.clientX, e.clientY, row);
-      } else {
-        showFileContextMenu(entryPath, e.clientX, e.clientY, row);
-      }
+      const isFolder  = !!row.querySelector(".explorer-toggle");
+      if (isFolder) showFolderContextMenu(entryPath, e.clientX, e.clientY, row);
+      else          showFileContextMenu(entryPath, e.clientX, e.clientY, row);
     } else {
       showWorkspaceContextMenu(e.clientX, e.clientY);
     }
   });
 
-  // F2 on active-file row → rename
   sidebar.addEventListener("keydown", (e) => {
     if (e.key !== "F2") return;
     const row = sidebar.querySelector(".explorer-row.active-file[data-path]");
@@ -561,5 +697,23 @@ function showWorkspaceContextMenu(x, y) {
       e.preventDefault();
       inlineRenameRow(row, row.dataset.path);
     }
+  });
+}());
+
+// ── Wire up right-click on the editor area ────────────────────
+(function () {
+  const editorArea = document.getElementById("editor-area");
+  if (!editorArea) return;
+
+  editorArea.addEventListener("contextmenu", (e) => {
+    // Let Monaco handle right-clicks inside its own canvas/textarea
+    const monacoEl = document.getElementById("editor");
+    if (monacoEl && monacoEl.contains(e.target)) return;
+
+    // Right-click on breadcrumb or toolbar → ignore
+    if (e.target.closest("#editor-topbar") || e.target.closest("#ext-toolbar")) return;
+
+    e.preventDefault();
+    showEditorContextMenu(e.clientX, e.clientY);
   });
 }());
