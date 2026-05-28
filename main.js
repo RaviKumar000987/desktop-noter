@@ -267,6 +267,46 @@ ipcMain.handle("terminal-set-cwd", async (e, dir) => {
   return terminalCwd;
 });
 
+// ─── Project Structure Creator ───────────────────────────────────────────────
+ipcMain.handle("create-project-structure", async (e, { folderPath, files, setupCommand }) => {
+  const result = { success: true, filesCreated: 0, setupDone: false, setupError: null };
+
+  try {
+    for (const file of files) {
+      const relParts = file.path.split("/");
+      const filePath = path.join(folderPath, ...relParts);
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, file.content, "utf8");
+        result.filesCreated++;
+      }
+    }
+  } catch (err) {
+    return { success: false, error: err.message, filesCreated: result.filesCreated };
+  }
+
+  if (setupCommand) {
+    try {
+      await new Promise((resolve) => {
+        exec(
+          setupCommand,
+          { cwd: folderPath, env: process.env, shell: true, timeout: 60000 },
+          (err, _stdout, stderr) => {
+            if (err) result.setupError = stderr || err.message;
+            else result.setupDone = true;
+            resolve();
+          }
+        );
+      });
+    } catch (err) {
+      result.setupError = err.message;
+    }
+  }
+
+  return result;
+});
+
 // ─── Global Search ────────────────────────────────────────────────────────────
 ipcMain.handle("global-search", async (e, { query, rootPath, caseSensitive, useRegex }) => {
   if (!query || !rootPath) return [];

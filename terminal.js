@@ -5,22 +5,25 @@
 // ═══════════════════════════════════════════════════════════════
 
 const TerminalPanel = (() => {
-  let visible  = false;
-  let history  = [];
-  let histIdx  = -1;
-  let cwd      = "";
+  let visible = false;
+  let history = [];
+  let histIdx = -1;
+  let cwd = "";
 
   const MAX_LINES = 500; // max DOM children in output — prevents memory growth
 
   // ── Tiny helpers ─────────────────────────────────────────────
-  const $  = (id) => document.getElementById(id);
-  const esc = (s) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   function shortCwd(p) {
     if (!p) return "~";
     const parts = p.replace(/\\/g, "/").split("/").filter(Boolean);
     if (parts.length === 0) return "/";
-    return parts.length <= 2 ? parts.join("/") : "…/" + parts.slice(-2).join("/");
+    return parts.length <= 2
+      ? parts.join("/")
+      : "…/" + parts.slice(-2).join("/");
   }
 
   function setPrompt(newCwd) {
@@ -51,13 +54,18 @@ const TerminalPanel = (() => {
     append(`<div class="term-cmd">❯ ${esc(cmd)}</div>`);
 
     // Special: clear
-    if (cmd === "clear" || cmd === "cls") { clearOutput(); return; }
+    if (cmd === "clear" || cmd === "cls") {
+      clearOutput();
+      return;
+    }
 
     try {
       const res = await window.electronAPI.terminalExec(cmd);
       if (res.cwd) setPrompt(res.cwd);
-      if (res.stdout) append(`<div class="term-stdout">${esc(res.stdout)}</div>`);
-      if (res.stderr) append(`<div class="term-stderr">${esc(res.stderr)}</div>`);
+      if (res.stdout)
+        append(`<div class="term-stdout">${esc(res.stdout)}</div>`);
+      if (res.stderr)
+        append(`<div class="term-stderr">${esc(res.stderr)}</div>`);
     } catch (err) {
       append(`<div class="term-stderr">${esc(String(err))}</div>`);
     }
@@ -72,13 +80,22 @@ const TerminalPanel = (() => {
       runCmd(cmd);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      if (histIdx < history.length - 1) { histIdx++; inp.value = history[histIdx] || ""; }
+      if (histIdx < history.length - 1) {
+        histIdx++;
+        inp.value = history[histIdx] || "";
+      }
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      if (histIdx > 0) { histIdx--; inp.value = history[histIdx] || ""; }
-      else             { histIdx = -1; inp.value = ""; }
+      if (histIdx > 0) {
+        histIdx--;
+        inp.value = history[histIdx] || "";
+      } else {
+        histIdx = -1;
+        inp.value = "";
+      }
     } else if (e.ctrlKey && e.key === "l") {
-      e.preventDefault(); clearOutput();
+      e.preventDefault();
+      clearOutput();
     }
   }
 
@@ -89,7 +106,9 @@ const TerminalPanel = (() => {
 
   // ── Terminal panel resize (drag top edge) ─────────────────────
   (function initResize() {
-    let dragging = false, startY = 0, startH = 0;
+    let dragging = false,
+      startY = 0,
+      startH = 0;
     const panel = () => $("terminal-panel");
 
     document.addEventListener("mousedown", (e) => {
@@ -99,7 +118,7 @@ const TerminalPanel = (() => {
       startY = e.clientY;
       startH = panel()?.offsetHeight || 240;
       document.body.style.userSelect = "none";
-      document.body.style.cursor     = "row-resize";
+      document.body.style.cursor = "row-resize";
     });
     document.addEventListener("mousemove", (e) => {
       if (!dragging) return;
@@ -111,7 +130,7 @@ const TerminalPanel = (() => {
       if (!dragging) return;
       dragging = false;
       document.body.style.userSelect = "";
-      document.body.style.cursor     = "";
+      document.body.style.cursor = "";
     });
   })();
 
@@ -139,7 +158,9 @@ const TerminalPanel = (() => {
     window.editor?.focus();
   }
 
-  function toggle() { visible ? hide() : show(); }
+  function toggle() {
+    visible ? hide() : show();
+  }
 
   // ── Set cwd (called when a folder is opened in explorer) ──────
   function setCwd(dir) {
@@ -152,18 +173,22 @@ const TerminalPanel = (() => {
   $("terminal-close-btn")?.addEventListener("click", hide);
   $("terminal-clear-btn")?.addEventListener("click", clearOutput);
   $("terminal-input")?.addEventListener("keydown", onKey);
-  $("terminal-output")?.addEventListener("click", () => $("terminal-input")?.focus());
+  $("terminal-output")?.addEventListener("click", () =>
+    $("terminal-input")?.focus(),
+  );
 
   // ── Global shortcut (works when Monaco doesn't have focus) ───
   document.addEventListener("keydown", (e) => {
-    if (e.ctrlKey && !e.shiftKey && e.key === "j") { e.preventDefault(); toggle(); }
+    if (e.ctrlKey && !e.shiftKey && e.key === "j") {
+      e.preventDefault();
+      toggle();
+    }
   });
 
   // ── Monaco shortcut (when editor has focus) ──────────────────
   document.addEventListener("monaco-ready", () => {
-    window.editor?.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ,
-      () => toggle()
+    window.editor?.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ, () =>
+      toggle(),
     );
   });
 

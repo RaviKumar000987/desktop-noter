@@ -30,5 +30,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   terminalSetCwd: (dir)           => ipcRenderer.invoke("terminal-set-cwd", dir),
 
   // ── Global Search ────────────────────────────────────────────
-  globalSearch:   (opts)          => ipcRenderer.invoke("global-search", opts),
+  globalSearch:          (opts)   => ipcRenderer.invoke("global-search", opts),
+
+  // ── Project Structure ────────────────────────────────────────
+  createProjectStructure: (opts)  => ipcRenderer.invoke("create-project-structure", opts),
 });

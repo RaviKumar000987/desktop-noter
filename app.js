@@ -662,6 +662,212 @@ async function restoreSessionState() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  PROJECT TEMPLATES
+// ═══════════════════════════════════════════════════════════════
+const LANGUAGE_TEMPLATES = [
+  {
+    id: "nodejs", label: "Node.js", icon: "⬢",
+    desc: "npm · index.js",
+    color: "#a6e3a1",
+    files: [
+      { path: "package.json", content: JSON.stringify({ name: "my-project", version: "1.0.0", description: "", main: "index.js", scripts: { start: "node index.js", test: "echo \"No tests yet\"" }, keywords: [], author: "", license: "ISC" }, null, 2) },
+      { path: "index.js",     content: "// Entry point\nconsole.log(\"Hello, World!\");\n" },
+      { path: "src/app.js",   content: "// Application code\n" },
+      { path: ".gitignore",   content: "node_modules/\n.env\n*.log\n" },
+      { path: ".env",         content: "# Environment variables\n# PORT=3000\n" },
+      { path: "README.md",    content: "# My Node.js Project\n\n## Setup\n\n```bash\nnpm install\nnpm start\n```\n" },
+    ],
+  },
+  {
+    id: "python", label: "Python", icon: "🐍",
+    desc: "venv · pip",
+    color: "#89b4fa",
+    files: [
+      { path: "main.py",          content: "def main():\n    print(\"Hello, World!\")\n\nif __name__ == \"__main__\":\n    main()\n" },
+      { path: "requirements.txt", content: "# Add dependencies here\n# requests==2.31.0\n" },
+      { path: ".gitignore",       content: "__pycache__/\nvenv/\n.env\n*.pyc\n*.pyo\n.pytest_cache/\n" },
+      { path: ".env",             content: "# Environment variables\n# DEBUG=true\n" },
+      { path: "README.md",        content: "# My Python Project\n\n## Setup\n\n```bash\npython -m venv venv\n# Windows:\nvenv\\Scripts\\activate\n# Mac/Linux:\nsource venv/bin/activate\npip install -r requirements.txt\n```\n\n## Run\n\n```bash\npython main.py\n```\n" },
+    ],
+    setup: "python -m venv venv",
+  },
+  {
+    id: "react", label: "React", icon: "⚛",
+    desc: "Vite · JSX",
+    color: "#89dceb",
+    files: [
+      { path: "package.json",  content: JSON.stringify({ name: "my-react-app", version: "0.1.0", private: true, scripts: { dev: "vite", build: "vite build", preview: "vite preview" }, dependencies: { react: "^18.2.0", "react-dom": "^18.2.0" }, devDependencies: { "@vitejs/plugin-react": "^4.0.0", vite: "^5.0.0" } }, null, 2) },
+      { path: "vite.config.js", content: "import { defineConfig } from 'vite'\nimport react from '@vitejs/plugin-react'\n\nexport default defineConfig({\n  plugins: [react()],\n})\n" },
+      { path: "index.html",    content: "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>React App</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.jsx\"></script>\n  </body>\n</html>\n" },
+      { path: "src/main.jsx",  content: "import React from 'react'\nimport ReactDOM from 'react-dom/client'\nimport App from './App.jsx'\nimport './index.css'\n\nReactDOM.createRoot(document.getElementById('root')).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>,\n)\n" },
+      { path: "src/App.jsx",   content: "import './App.css'\n\nfunction App() {\n  return (\n    <div className=\"App\">\n      <h1>Hello React!</h1>\n    </div>\n  )\n}\n\nexport default App\n" },
+      { path: "src/index.css", content: "* { box-sizing: border-box; margin: 0; padding: 0; }\n" },
+      { path: "src/App.css",   content: ".App { text-align: center; padding: 2rem; }\n" },
+      { path: ".gitignore",    content: "node_modules/\ndist/\n.env\n*.local\n" },
+      { path: "README.md",     content: "# My React App\n\n## Setup\n\n```bash\nnpm install\nnpm run dev\n```\n" },
+    ],
+    hint: "Run `npm install` then `npm run dev` to start",
+  },
+  {
+    id: "html", label: "HTML/CSS/JS", icon: "🌐",
+    desc: "Vanilla web",
+    color: "#fab387",
+    files: [
+      { path: "index.html", content: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n  <title>My Project</title>\n  <link rel=\"stylesheet\" href=\"style.css\" />\n</head>\n<body>\n  <h1>Hello, World!</h1>\n  <script src=\"script.js\"></script>\n</body>\n</html>\n" },
+      { path: "style.css",  content: "* { box-sizing: border-box; margin: 0; padding: 0; }\n\nbody {\n  font-family: sans-serif;\n  background: #1e1e2e;\n  color: #cdd6f4;\n  display: flex;\n  justify-content: center;\n  align-items: center;\n  min-height: 100vh;\n}\n" },
+      { path: "script.js",  content: "// JavaScript code\nconsole.log(\"Hello, World!\");\n" },
+      { path: "README.md",  content: "# My Web Project\n\nOpen `index.html` in a browser to get started.\n" },
+    ],
+  },
+  {
+    id: "vue", label: "Vue.js", icon: "💚",
+    desc: "Vite · SFC",
+    color: "#a6e3a1",
+    files: [
+      { path: "package.json",    content: JSON.stringify({ name: "my-vue-app", version: "0.0.0", private: true, scripts: { dev: "vite", build: "vite build", preview: "vite preview" }, dependencies: { vue: "^3.3.0" }, devDependencies: { "@vitejs/plugin-vue": "^4.2.0", vite: "^5.0.0" } }, null, 2) },
+      { path: "vite.config.js",  content: "import { defineConfig } from 'vite'\nimport vue from '@vitejs/plugin-vue'\n\nexport default defineConfig({\n  plugins: [vue()],\n})\n" },
+      { path: "index.html",      content: "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <title>Vue App</title>\n  </head>\n  <body>\n    <div id=\"app\"></div>\n    <script type=\"module\" src=\"/src/main.js\"></script>\n  </body>\n</html>\n" },
+      { path: "src/main.js",     content: "import { createApp } from 'vue'\nimport App from './App.vue'\n\ncreateApp(App).mount('#app')\n" },
+      { path: "src/App.vue",     content: "<template>\n  <div>\n    <h1>Hello Vue!</h1>\n  </div>\n</template>\n\n<script setup>\n// Component logic\n</script>\n\n<style>\nh1 { color: #a6e3a1; }\n</style>\n" },
+      { path: ".gitignore",      content: "node_modules/\ndist/\n.env\n*.local\n" },
+      { path: "README.md",       content: "# My Vue App\n\n## Setup\n\n```bash\nnpm install\nnpm run dev\n```\n" },
+    ],
+    hint: "Run `npm install` then `npm run dev` to start",
+  },
+  {
+    id: "flask", label: "Flask", icon: "🫙",
+    desc: "Python · web",
+    color: "#f5c2e7",
+    files: [
+      { path: "app.py",           content: "from flask import Flask, render_template\n\napp = Flask(__name__)\n\n@app.route('/')\ndef index():\n    return render_template('index.html')\n\nif __name__ == '__main__':\n    app.run(debug=True)\n" },
+      { path: "requirements.txt", content: "flask>=3.0.0\n" },
+      { path: "templates/index.html", content: "<!DOCTYPE html>\n<html>\n<head><title>Flask App</title></head>\n<body>\n  <h1>Hello from Flask!</h1>\n</body>\n</html>\n" },
+      { path: "static/style.css", content: "body { font-family: sans-serif; }\n" },
+      { path: ".gitignore",       content: "__pycache__/\nvenv/\n.env\n*.pyc\ninstance/\n" },
+      { path: ".env",             content: "FLASK_ENV=development\nFLASK_DEBUG=1\n" },
+      { path: "README.md",        content: "# My Flask App\n\n## Setup\n\n```bash\npython -m venv venv\nvenv\\Scripts\\activate  # Windows\npip install -r requirements.txt\npython app.py\n```\n" },
+    ],
+    setup: "python -m venv venv",
+  },
+  {
+    id: "java", label: "Java", icon: "☕",
+    desc: "Maven project",
+    color: "#f9e2af",
+    files: [
+      { path: "src/main/java/Main.java", content: "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, World!\");\n    }\n}\n" },
+      { path: "pom.xml", content: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\"\n         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd\">\n  <modelVersion>4.0.0</modelVersion>\n  <groupId>com.example</groupId>\n  <artifactId>my-project</artifactId>\n  <version>1.0-SNAPSHOT</version>\n  <properties>\n    <maven.compiler.source>17</maven.compiler.source>\n    <maven.compiler.target>17</maven.compiler.target>\n    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n  </properties>\n</project>\n" },
+      { path: ".gitignore", content: "target/\n*.class\n*.jar\n.idea/\n*.iml\n" },
+      { path: "README.md",  content: "# My Java Project\n\n## Build & Run\n\n```bash\nmvn compile\nmvn exec:java -Dexec.mainClass=\"Main\"\n```\n" },
+    ],
+  },
+  {
+    id: "c", label: "C", icon: "🔵",
+    desc: "GCC · Makefile",
+    color: "#89b4fa",
+    files: [
+      { path: "main.c",   content: "#include <stdio.h>\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}\n" },
+      { path: "Makefile", content: "CC = gcc\nCFLAGS = -Wall -Wextra -std=c11\nTARGET = main\n\n$(TARGET): main.c\n\t$(CC) $(CFLAGS) -o $(TARGET) main.c\n\nclean:\n\trm -f $(TARGET)\n" },
+      { path: ".gitignore", content: "*.o\n*.out\nmain\nbuild/\n" },
+      { path: "README.md",  content: "# My C Project\n\n## Build\n\n```bash\nmake\n./main\n```\n" },
+    ],
+  },
+  {
+    id: "cpp", label: "C++", icon: "🔷",
+    desc: "G++ · Makefile",
+    color: "#89b4fa",
+    files: [
+      { path: "main.cpp",  content: "#include <iostream>\n\nint main() {\n    std::cout << \"Hello, World!\" << std::endl;\n    return 0;\n}\n" },
+      { path: "Makefile",  content: "CXX = g++\nCXXFLAGS = -Wall -Wextra -std=c++17\nTARGET = main\n\n$(TARGET): main.cpp\n\t$(CXX) $(CXXFLAGS) -o $(TARGET) main.cpp\n\nclean:\n\trm -f $(TARGET)\n" },
+      { path: ".gitignore", content: "*.o\n*.out\nmain\nbuild/\n" },
+      { path: "README.md",  content: "# My C++ Project\n\n## Build\n\n```bash\nmake\n./main\n```\n" },
+    ],
+  },
+  {
+    id: "go", label: "Go", icon: "🐹",
+    desc: "Modules · go mod",
+    color: "#89dceb",
+    files: [
+      { path: "main.go", content: "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"Hello, World!\")\n}\n" },
+      { path: "go.mod",  content: "module my-project\n\ngo 1.21\n" },
+      { path: ".gitignore", content: "# Binaries\n*.exe\n*.exe~\n*.dll\n*.so\n*.dylib\n/bin/\n*.out\n" },
+      { path: "README.md",  content: "# My Go Project\n\n## Run\n\n```bash\ngo run main.go\n```\n\n## Build\n\n```bash\ngo build -o app .\n```\n" },
+    ],
+  },
+  {
+    id: "rust", label: "Rust", icon: "🦀",
+    desc: "Cargo · crates",
+    color: "#fab387",
+    files: [
+      { path: "src/main.rs", content: "fn main() {\n    println!(\"Hello, World!\");\n}\n" },
+      { path: "Cargo.toml",  content: "[package]\nname = \"my-project\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n" },
+      { path: ".gitignore",  content: "/target/\n" },
+      { path: "README.md",   content: "# My Rust Project\n\n## Run\n\n```bash\ncargo run\n```\n\n## Build\n\n```bash\ncargo build --release\n```\n" },
+    ],
+  },
+  {
+    id: "blank", label: "Blank", icon: "📄",
+    desc: "Empty workspace",
+    color: "#585b70",
+    files: [
+      { path: "README.md", content: "# My Project\n\nWelcome to your new workspace.\n" },
+    ],
+  },
+];
+
+// ── Language selection modal ──────────────────────────────────
+function showProjectTemplateModal() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.id = "proj-modal-overlay";
+
+    const modal = document.createElement("div");
+    modal.id = "proj-modal";
+
+    const cards = LANGUAGE_TEMPLATES.map(t =>
+      `<button class="proj-lang-card" data-id="${t.id}" style="--card-color:${t.color}" title="${t.label}">
+         <span class="proj-card-icon">${t.icon}</span>
+         <span class="proj-card-name">${t.label}</span>
+         <span class="proj-card-desc">${t.desc}</span>
+       </button>`
+    ).join("");
+
+    modal.innerHTML =
+      `<div id="proj-modal-header">
+         <h2>Choose Project Template</h2>
+         <p>Select a language or framework to scaffold your project structure</p>
+       </div>
+       <div id="proj-modal-grid">${cards}</div>
+       <div id="proj-modal-footer">
+         <p>ESC or click outside to cancel</p>
+         <button class="proj-cancel-btn">Cancel</button>
+       </div>`;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    function finish(template) {
+      overlay.remove();
+      resolve(template);
+    }
+
+    modal.querySelectorAll(".proj-lang-card").forEach(card => {
+      card.addEventListener("click", () => {
+        const t = LANGUAGE_TEMPLATES.find(x => x.id === card.dataset.id);
+        finish(t || null);
+      });
+    });
+
+    modal.querySelector(".proj-cancel-btn").addEventListener("click", () => finish(null));
+    overlay.addEventListener("click", e => { if (e.target === overlay) finish(null); });
+
+    const onKey = (e) => {
+      if (e.key === "Escape") { document.removeEventListener("keydown", onKey); finish(null); }
+    };
+    document.addEventListener("keydown", onKey);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  WORKSPACE  (create / save / open .noterws files)
 // ═══════════════════════════════════════════════════════════════
 
@@ -677,34 +883,60 @@ async function createWorkspace() {
 
   closeAllMenus();
 
-  // ── 2. Wipe current state ───────────────────────────────────
+  // ── 2. Show template / language selection modal ─────────────
+  const selectedTemplate = await showProjectTemplateModal();
+  if (selectedTemplate === null) return;    // user cancelled
+
+  // ── 3. Wipe current state ───────────────────────────────────
   TabManager.closeAll(true);
 
   explorerState.rootPath = null;
   explorerState.expandedPaths = new Set();
 
-  const noFolderMsg    = document.getElementById("no-folder-msg");
+  const noFolderMsg     = document.getElementById("no-folder-msg");
   const explorerContent = document.getElementById("explorer-content");
-  const explorerTree   = document.getElementById("explorer-tree");
-  const folderNameEl   = document.getElementById("folder-name");
+  const explorerTree    = document.getElementById("explorer-tree");
+  const folderNameEl    = document.getElementById("folder-name");
 
-  if (noFolderMsg)    noFolderMsg.style.display    = "";
-  if (explorerContent) explorerContent.style.display = "none";
-  if (explorerTree)   explorerTree.innerHTML        = "";
-  if (folderNameEl)   folderNameEl.textContent      = "";
+  if (noFolderMsg)     noFolderMsg.style.display     = "";
+  if (explorerContent) explorerContent.style.display  = "none";
+  if (explorerTree)    explorerTree.innerHTML          = "";
+  if (folderNameEl)    folderNameEl.textContent        = "";
 
-  // Make sure sidebar is visible for the new workspace
   if (!sidebarVisible) toggleSidebar(true);
 
-  // ── 3. Pick a root folder for the workspace ─────────────────
+  // ── 4. Pick a root folder for the workspace ─────────────────
   const folderPath = await window.electronAPI.openFolder();
-  if (folderPath) await openExplorerFolder(folderPath);
 
-  // ── 4. Start with a blank tab ────────────────────────────────
+  if (folderPath) {
+    // ── 5. Create project files ─────────────────────────────────
+    const result = await window.electronAPI.createProjectStructure({
+      folderPath,
+      files:        selectedTemplate.files,
+      setupCommand: selectedTemplate.setup || null,
+    });
+
+    if (result.success) {
+      let msg = `${selectedTemplate.label} project ready · ${result.filesCreated} files created`;
+      if (result.setupDone)        msg += " · environment setup done ✓";
+      else if (result.setupError)  msg += " · (run setup manually)";
+      showToast(msg, "success", 4500);
+
+      if (selectedTemplate.hint) {
+        setTimeout(() => showToast(selectedTemplate.hint, "info", 5000), 4600);
+      }
+    } else {
+      showToast("Could not create project files: " + (result.error || "unknown error"), "error");
+    }
+
+    await openExplorerFolder(folderPath);
+  }
+
+  // ── 6. Start with a blank tab ────────────────────────────────
   const tab = TabManager.create();
   TabManager.activate(tab.id);
 
-  // ── 5. Save the workspace file ───────────────────────────────
+  // ── 7. Save the workspace file ───────────────────────────────
   const wsData = {
     version:      1,
     explorerPath: explorerState.rootPath,
@@ -715,9 +947,8 @@ async function createWorkspace() {
   const wsPath = await window.electronAPI.saveWorkspace(wsData);
 
   if (wsPath) {
-    showToast("Workspace created: " + basename(wsPath), "success");
+    showToast("Workspace saved: " + basename(wsPath), "success");
   } else {
-    // User cancelled the save dialog — workspace is still active in memory
     showToast("New workspace ready", "info");
   }
 
