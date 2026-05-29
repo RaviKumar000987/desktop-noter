@@ -99,4 +99,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
   crashBackupRead:  ()      => ipcRenderer.invoke("crash-backup-read"),
   crashBackupWrite: (data)  => ipcRenderer.invoke("crash-backup-write", data),
   crashBackupClear: ()      => ipcRenderer.invoke("crash-backup-clear"),
+
+  // ── Language Server Protocol (LSP) bridge ────────────────────
+  lspStart:    (serverId)                    => ipcRenderer.invoke("lsp:start", serverId),
+  lspStop:     (serverId)                    => ipcRenderer.invoke("lsp:stop", serverId),
+  lspRequest:  (serverId, method, params)    => ipcRenderer.invoke("lsp:request", { serverId, method, params }),
+  lspNotify:   (serverId, method, params)    => ipcRenderer.send("lsp:notify", { serverId, method, params }),
+  lspStatus:   ()                            => ipcRenderer.invoke("lsp:status"),
+  lspDetect:   ()                            => ipcRenderer.invoke("lsp:detect"),
+  // Events from server → renderer
+  onLspMessage:       (cb) => ipcRenderer.on("lsp:message",       (_e, d) => cb(d)),
+  onLspServerStatus:  (cb) => ipcRenderer.on("lsp:server-status", (_e, d) => cb(d)),
+  offLspMessage:      ()   => ipcRenderer.removeAllListeners("lsp:message"),
+  offLspServerStatus: ()   => ipcRenderer.removeAllListeners("lsp:server-status"),
 });

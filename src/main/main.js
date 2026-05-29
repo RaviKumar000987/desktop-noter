@@ -6,6 +6,14 @@ const { exec, spawn } = require("child_process");
 const os = require("os");
 let mainWindow;
 
+// ── LSP Bridge (language server manager) ─────────────────────────────────────
+let lspBridge = null;
+try {
+  lspBridge = require("../main/lsp-bridge");
+} catch (e) {
+  console.warn("[Main] lsp-bridge not loaded:", e.message);
+}
+
 // ─── node-pty (optional) ─────────────────────────────────────────────────────
 let nodePty = null;
 try {
@@ -96,6 +104,13 @@ function createWindow() {
   });
   mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   // mainWindow.webContents.openDevTools();
+
+  // Register LSP bridge handlers once main window is ready
+  if (lspBridge) {
+    try { lspBridge.registerHandlers(mainWindow); } catch (e) {
+      console.warn("[Main] LSP bridge registration failed:", e.message);
+    }
+  }
 
   mainWindow.on("closed", () => {
     if (ptyProcess) {

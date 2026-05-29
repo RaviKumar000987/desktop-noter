@@ -23,6 +23,63 @@ function _register() {
   if (typeof monaco === 'undefined') return;
 
   // ════════════════════════════════════════════════════════════════════════════
+  //  HTML LANGUAGE CONFIGURATION — auto-closing pairs, brackets, surrounds
+  //  Registered here so it works even if Monaco's HTML worker hasn't loaded yet
+  // ════════════════════════════════════════════════════════════════════════════
+  monaco.languages.setLanguageConfiguration('html', {
+    autoClosingPairs: [
+      { open: '<',  close: '>'  },
+      { open: '"',  close: '"'  },
+      { open: "'",  close: "'"  },
+      { open: '`',  close: '`'  },
+      { open: '(',  close: ')'  },
+      { open: '[',  close: ']'  },
+      { open: '{',  close: '}'  },
+    ],
+    surroundingPairs: [
+      { open: '<',  close: '>'  },
+      { open: '"',  close: '"'  },
+      { open: "'",  close: "'"  },
+      { open: '`',  close: '`'  },
+      { open: '(',  close: ')'  },
+      { open: '[',  close: ']'  },
+      { open: '{',  close: '}'  },
+    ],
+    brackets: [
+      ['<', '>'], ['(', ')'], ['[', ']'], ['{', '}'],
+    ],
+    wordPattern: /(-?\d*\.\d\w*)|([^`~!@$^&*()=+[{\]}\\|;:'",.<>/\s]+)/g,
+    onEnterRules: [
+      // Auto-indent inside HTML tags: <div>\n  cursor\n</div>
+      {
+        beforeText: /<([^/\s>]+)(?:\s[^>]*)?>$/,
+        afterText:  /^<\/([^/\s>]+)>$/,
+        action: { indentAction: 1 }, // IndentAction.Indent
+      },
+    ],
+  });
+
+  // Also configure CSS/SCSS/LESS auto-closing
+  for (const lang of ['css', 'scss', 'less']) {
+    monaco.languages.setLanguageConfiguration(lang, {
+      autoClosingPairs: [
+        { open: '{',  close: '}'  },
+        { open: '(',  close: ')'  },
+        { open: '[',  close: ']'  },
+        { open: '"',  close: '"'  },
+        { open: "'",  close: "'"  },
+      ],
+      surroundingPairs: [
+        { open: '{',  close: '}'  },
+        { open: '(',  close: ')'  },
+        { open: '[',  close: ']'  },
+        { open: '"',  close: '"'  },
+        { open: "'",  close: "'"  },
+      ],
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
   //  CSS PROPERTY VALUE COMPLETIONS
   //  Fires when the cursor is after "property: " inside CSS/SCSS/LESS/style attrs
   // ════════════════════════════════════════════════════════════════════════════
@@ -878,6 +935,232 @@ function _register() {
           detail: `SVG — ${s.detail}`, insertText: s.insertText,
           insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
           sortText: 's' + s.label, range,
+        })),
+      };
+    },
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  //  HTML TAG AUTO-CLOSE  (triggered by '>')
+  //  When user types '>' after a non-void opening tag, suggest closing tag
+  // ════════════════════════════════════════════════════════════════════════════
+  const _VOID_TAGS = new Set(['area','base','br','col','embed','hr','img','input',
+                               'link','meta','param','source','track','wbr']);
+
+  monaco.languages.registerCompletionItemProvider('html', {
+    triggerCharacters: ['>'],
+    provideCompletionItems(model, position) {
+      const line   = model.getLineContent(position.lineNumber);
+      const before = line.slice(0, position.column - 1);
+      // Match a just-closed opening tag like <div class="foo">
+      const m = before.match(/<([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^>]*)?>$/);
+      if (!m) return { suggestions: [] };
+      const tag = m[1].toLowerCase();
+      if (_VOID_TAGS.has(tag)) return { suggestions: [] };
+
+      const range = {
+        startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
+        startColumn: position.column, endColumn: position.column,
+      };
+      return {
+        suggestions: [{
+          label:     `</${tag}>`,
+          kind:      monaco.languages.CompletionItemKind.Snippet,
+          detail:    `Auto-close <${tag}>`,
+          insertText: `$0</${tag}>`,
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          preselect: true,
+          sortText:  '000',
+          range,
+        }],
+      };
+    },
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  //  HTML TAG COMPLETIONS  (triggered by '<')
+  //  Provides all standard HTML5 tags with full snippets + docs
+  // ════════════════════════════════════════════════════════════════════════════
+  const _VOID = new Set(['area','base','br','col','embed','hr','img','input',
+                         'link','meta','param','source','track','wbr']);
+
+  const _ALL_TAGS = [
+    // Structure / Sectioning
+    { t:'html',    s:'html lang="${1:en}">\n\t<head>\n\t\t<meta charset="UTF-8"/>\n\t\t<title>${2:Title}</title>\n\t</head>\n\t<body>\n\t\t$0\n\t</body>\n</html', d:'Root HTML element' },
+    { t:'head',    s:'head>\n\t$0\n</head',    d:'Document metadata container' },
+    { t:'body',    s:'body>\n\t$0\n</body',    d:'Document body' },
+    { t:'header',  s:'header>\n\t$0\n</header',d:'Page or section header' },
+    { t:'nav',     s:'nav>\n\t$0\n</nav',      d:'Navigation links' },
+    { t:'main',    s:'main>\n\t$0\n</main',    d:'Main content of the document' },
+    { t:'section', s:'section>\n\t$0\n</section',d:'Thematic grouping of content' },
+    { t:'article', s:'article>\n\t$0\n</article',d:'Self-contained content' },
+    { t:'aside',   s:'aside>\n\t$0\n</aside',  d:'Secondary/sidebar content' },
+    { t:'footer',  s:'footer>\n\t$0\n</footer',d:'Footer for page or section' },
+    // Block containers
+    { t:'div',     s:'div>\n\t$0\n</div',      d:'Generic block container' },
+    { t:'p',       s:'p>$0</p',                d:'Paragraph' },
+    { t:'pre',     s:'pre>$0</pre',            d:'Preformatted text' },
+    { t:'blockquote',s:'blockquote cite="${1}">\n\t$0\n</blockquote',d:'Extended quotation' },
+    { t:'figure',  s:'figure>\n\t$0\n\t<figcaption>${1:Caption}</figcaption>\n</figure',d:'Figure with caption' },
+    { t:'figcaption',s:'figcaption>$0</figcaption',d:'Figure caption' },
+    { t:'details', s:'details>\n\t<summary>${1:Toggle}</summary>\n\t$0\n</details',d:'Expandable details' },
+    { t:'summary', s:'summary>$0</summary',    d:'Summary for <details>' },
+    { t:'dialog',  s:'dialog id="${1:modal}">\n\t$0\n</dialog',d:'Modal dialog element' },
+    { t:'template',s:'template id="${1:tmpl}">\n\t$0\n</template',d:'HTML template (not rendered)' },
+    // Headings
+    { t:'h1', s:'h1>$0</h1', d:'Top-level heading' },
+    { t:'h2', s:'h2>$0</h2', d:'Second-level heading' },
+    { t:'h3', s:'h3>$0</h3', d:'Third-level heading' },
+    { t:'h4', s:'h4>$0</h4', d:'Fourth-level heading' },
+    { t:'h5', s:'h5>$0</h5', d:'Fifth-level heading' },
+    { t:'h6', s:'h6>$0</h6', d:'Sixth-level heading' },
+    // Inline text
+    { t:'span',   s:'span>$0</span',     d:'Generic inline container' },
+    { t:'a',      s:'a href="${1:#}">$0</a', d:'Hyperlink' },
+    { t:'strong', s:'strong>$0</strong', d:'Strong importance (bold)' },
+    { t:'em',     s:'em>$0</em',         d:'Emphasis (italic)' },
+    { t:'code',   s:'code>$0</code',     d:'Inline code' },
+    { t:'mark',   s:'mark>$0</mark',     d:'Highlighted text' },
+    { t:'small',  s:'small>$0</small',   d:'Fine print / small text' },
+    { t:'del',    s:'del>$0</del',       d:'Deleted text (strikethrough)' },
+    { t:'ins',    s:'ins>$0</ins',       d:'Inserted text (underline)' },
+    { t:'abbr',   s:'abbr title="${1:Abbreviation}">$0</abbr', d:'Abbreviation with tooltip' },
+    { t:'time',   s:'time datetime="${1}">$0</time', d:'Date/time element' },
+    { t:'sub',    s:'sub>$0</sub',       d:'Subscript text' },
+    { t:'sup',    s:'sup>$0</sup',       d:'Superscript text' },
+    { t:'kbd',    s:'kbd>$0</kbd',       d:'Keyboard input indicator' },
+    { t:'q',      s:'q>$0</q',           d:'Short inline quote' },
+    { t:'cite',   s:'cite>$0</cite',     d:'Citation reference' },
+    { t:'b',      s:'b>$0</b',           d:'Bold text (no semantic importance)' },
+    { t:'i',      s:'i>$0</i',           d:'Italic text (foreign/technical terms)' },
+    { t:'u',      s:'u>$0</u',           d:'Underline annotation' },
+    { t:'s',      s:'s>$0</s',           d:'Strikethrough (no longer accurate)' },
+    { t:'wbr',    s:'wbr/>', d:'Word break opportunity', void:true },
+    { t:'br',     s:'br/>', d:'Line break', void:true },
+    { t:'hr',     s:'hr/>', d:'Horizontal rule / thematic break', void:true },
+    // Lists
+    { t:'ul',     s:'ul>\n\t<li>$0</li>\n</ul',   d:'Unordered list' },
+    { t:'ol',     s:'ol>\n\t<li>$0</li>\n</ol',   d:'Ordered list' },
+    { t:'li',     s:'li>$0</li',                   d:'List item' },
+    { t:'dl',     s:'dl>\n\t<dt>${1:Term}</dt>\n\t<dd>$0</dd>\n</dl',d:'Description list' },
+    { t:'dt',     s:'dt>$0</dt',  d:'Description term' },
+    { t:'dd',     s:'dd>$0</dd',  d:'Description detail' },
+    // Forms
+    { t:'form',      s:'form action="${1:#}" method="${2:post}">\n\t$0\n</form', d:'Form element' },
+    { t:'input',     s:'input type="${1:text}" name="${2}" placeholder="${3}"/>', d:'Form input control', void:true },
+    { t:'button',    s:'button type="${1:button}">$0</button>', d:'Clickable button' },
+    { t:'textarea',  s:'textarea name="${1}" rows="${2:4}" placeholder="${3}">$0</textarea>', d:'Multi-line text input' },
+    { t:'select',    s:'select name="${1}">\n\t<option value="${2}">${3}</option>\n\t$0\n</select', d:'Dropdown select' },
+    { t:'option',    s:'option value="${1}">$0</option', d:'Select option' },
+    { t:'optgroup',  s:'optgroup label="${1}">\n\t$0\n</optgroup', d:'Option group' },
+    { t:'label',     s:'label for="${1}">$0</label', d:'Form control label' },
+    { t:'fieldset',  s:'fieldset>\n\t<legend>${1:Legend}</legend>\n\t$0\n</fieldset', d:'Form group' },
+    { t:'legend',    s:'legend>$0</legend', d:'Fieldset caption' },
+    { t:'datalist',  s:'datalist id="${1}">\n\t<option value="${2}"/>\n\t$0\n</datalist', d:'Input suggestions list' },
+    { t:'output',    s:'output for="${1}" name="${2}">$0</output', d:'Form output result' },
+    { t:'progress',  s:'progress value="${1:50}" max="${2:100}">$0</progress', d:'Progress bar' },
+    { t:'meter',     s:'meter value="${1}" min="${2:0}" max="${3:100}">$0</meter', d:'Scalar gauge' },
+    // Tables
+    { t:'table',   s:'table>\n\t<thead>\n\t\t<tr>\n\t\t\t<th>$0</th>\n\t\t</tr>\n\t</thead>\n\t<tbody>\n\t\t<tr>\n\t\t\t<td></td>\n\t\t</tr>\n\t</tbody>\n</table', d:'Table' },
+    { t:'thead',   s:'thead>\n\t$0\n</thead',  d:'Table head' },
+    { t:'tbody',   s:'tbody>\n\t$0\n</tbody',  d:'Table body' },
+    { t:'tfoot',   s:'tfoot>\n\t$0\n</tfoot',  d:'Table footer' },
+    { t:'tr',      s:'tr>\n\t<td>$0</td>\n</tr', d:'Table row' },
+    { t:'td',      s:'td>$0</td', d:'Table cell' },
+    { t:'th',      s:'th scope="${1:col}">$0</th', d:'Table header cell' },
+    { t:'caption', s:'caption>$0</caption', d:'Table caption' },
+    { t:'colgroup',s:'colgroup>\n\t$0\n</colgroup', d:'Column group' },
+    { t:'col',     s:'col span="${1:1}"/>', d:'Table column', void:true },
+    // Media
+    { t:'img',     s:'img src="${1}" alt="${2}" width="${3}" height="${4}"/>', d:'Image', void:true },
+    { t:'video',   s:'video src="${1}" controls>\n\t$0\n</video', d:'Video element' },
+    { t:'audio',   s:'audio src="${1}" controls>\n\t$0\n</audio', d:'Audio element' },
+    { t:'source',  s:'source src="${1}" type="${2:video/mp4}"/>', d:'Media source', void:true },
+    { t:'picture', s:'picture>\n\t<source srcset="${1}" media="${2}"/>\n\t<img src="${3}" alt="${4}"/>\n</picture', d:'Responsive image' },
+    { t:'track',   s:'track kind="${1:subtitles}" src="${2}" srclang="${3:en}" label="${4}"/>', d:'Text track', void:true },
+    { t:'canvas',  s:'canvas id="${1}" width="${2:800}" height="${3:600}">$0</canvas', d:'Canvas drawing surface' },
+    { t:'iframe',  s:'iframe src="${1}" width="${2}" height="${3}" title="${4}" loading="lazy">$0</iframe', d:'Inline frame' },
+    // Metadata / head
+    { t:'meta',    s:'meta name="${1}" content="${2}"/>', d:'Metadata', void:true },
+    { t:'link',    s:'link rel="${1:stylesheet}" href="${2}"/>', d:'External resource link', void:true },
+    { t:'style',   s:'style>\n\t$0\n</style', d:'Embedded CSS' },
+    { t:'script',  s:'script>\n\t$0\n</script', d:'Embedded or linked JS' },
+    { t:'title',   s:'title>$0</title', d:'Document title' },
+    { t:'base',    s:'base href="${1}"/>', d:'Base URL', void:true },
+    { t:'noscript',s:'noscript>$0</noscript', d:'No-script fallback' },
+    // Semantic misc
+    { t:'address', s:'address>$0</address', d:'Contact information' },
+    { t:'map',     s:'map name="${1}">\n\t$0\n</map', d:'Image map' },
+    { t:'area',    s:'area shape="${1:rect}" coords="${2}" href="${3}" alt="${4}"/>', d:'Image map area', void:true },
+    { t:'object',  s:'object data="${1}" type="${2}" width="${3}" height="${4}">$0</object', d:'External object embed' },
+    { t:'embed',   s:'embed src="${1}" type="${2}" width="${3}" height="${4}"/>', d:'External content embed', void:true },
+    { t:'slot',    s:'slot name="${1}">$0</slot', d:'Web Component slot' },
+    { t:'data',    s:'data value="${1}">$0</data', d:'Machine-readable value' },
+    // SVG
+    { t:'svg',     s:'svg xmlns="http://www.w3.org/2000/svg" viewBox="${1:0 0 24 24}" width="${2:24}" height="${3:24}">\n\t$0\n</svg', d:'Inline SVG container' },
+  ];
+
+  monaco.languages.registerCompletionItemProvider('html', {
+    triggerCharacters: ['<'],
+    provideCompletionItems(model, position) {
+      const lineText = model.getLineContent(position.lineNumber);
+      const before   = lineText.slice(0, position.column - 1);
+
+      // Only trigger when we just typed '<' or '<' followed by partial tag name
+      const tagStartMatch = before.match(/<(\/?)([\w]*)$/);
+      if (!tagStartMatch) return { suggestions: [] };
+
+      const isClosing = tagStartMatch[1] === '/';
+      const partial   = tagStartMatch[2].toLowerCase();
+
+      // For closing tags, find the nearest unclosed tag
+      if (isClosing) {
+        // Walk backwards to find open tag
+        let openTag = null;
+        for (let ln = position.lineNumber; ln >= Math.max(1, position.lineNumber - 50); ln--) {
+          const l = model.getLineContent(ln);
+          const m = l.match(/<([a-z][a-z0-9]*)[^>]*>/gi);
+          if (m) { openTag = m[m.length - 1].match(/<([a-z][a-z0-9]*)/i)?.[1]?.toLowerCase(); break; }
+        }
+        if (!openTag) return { suggestions: [] };
+        const word = model.getWordUntilPosition(position);
+        const range = {
+          startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
+          startColumn: word.startColumn, endColumn: word.endColumn,
+        };
+        return {
+          suggestions: [{
+            label: `/${openTag}>`,
+            kind: monaco.languages.CompletionItemKind.Snippet,
+            detail: `Close <${openTag}>`,
+            insertText: `${openTag}>`,
+            range,
+            sortText: '0',
+          }],
+        };
+      }
+
+      // Filter tags by partial input
+      const filtered = partial
+        ? _ALL_TAGS.filter(t => t.t.startsWith(partial))
+        : _ALL_TAGS;
+
+      const word = model.getWordUntilPosition(position);
+      const range = {
+        startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
+        startColumn: word.startColumn, endColumn: word.endColumn,
+      };
+
+      return {
+        suggestions: filtered.map((tag, i) => ({
+          label:    tag.t,
+          kind:     monaco.languages.CompletionItemKind.Property,
+          detail:   tag.d,
+          documentation: { value: HTML_HOVER[tag.t] || tag.d },
+          insertText: tag.s,
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          sortText: String(i).padStart(3, '0'),
+          range,
         })),
       };
     },

@@ -408,7 +408,8 @@ const CommandPalette = (() => {
 
   function hide() {
     _overlay?.classList.remove('cp-visible');
-    window.editor?.focus();
+    // Use the robust refocus helper if available, else fall back to editor.focus()
+    setTimeout(() => (window._refocusEditor || (() => window.editor?.focus()))(), 30);
   }
 
   function toggle() {

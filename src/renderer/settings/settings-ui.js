@@ -565,6 +565,7 @@ const SettingsUI = (() => {
     if (typeof ActivityBar !== 'undefined') {
       ActivityBar.setActive(window.sidebarVisible ? 'explorer' : null);
     }
+    setTimeout(() => (window._refocusEditor || (() => window.editor?.focus()))(), 50);
   }
 
   // ── SVG icon helpers ──────────────────────────────────────────

@@ -227,7 +227,10 @@ window.NoterWelcome = (() => {
     _loadRecent();
   }
 
-  function hide() { _panel?.classList.remove('welcome-visible'); }
+  function hide() {
+    _panel?.classList.remove('welcome-visible');
+    setTimeout(() => (window._refocusEditor || (() => window.editor?.focus()))(), 50);
+  }
 
   function _shouldShow() {
     try { return localStorage.getItem('noter.welcome.show') !== '0'; } catch { return true; }

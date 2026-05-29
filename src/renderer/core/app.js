@@ -3,6 +3,24 @@
 //  Features: Multi-Tab · Project Explorer · Workspace
 // ═══════════════════════════════════════════════════════════════
 
+// ─── Monaco Worker URLs — must be set BEFORE loader.js runs ────────────────
+// Electron's CSP blocks blob: worker URLs. We point Monaco directly to the
+// worker files so HTML/CSS/JSON/TS language services load correctly.
+window.MonacoEnvironment = {
+  getWorkerUrl(_moduleId, label) {
+    const base = '../../node_modules/monaco-editor/min/vs';
+    if (label === 'json')
+      return `${base}/language/json/json.worker.js`;
+    if (label === 'css' || label === 'scss' || label === 'less')
+      return `${base}/language/css/css.worker.js`;
+    if (label === 'html' || label === 'handlebars' || label === 'razor')
+      return `${base}/language/html/html.worker.js`;
+    if (label === 'typescript' || label === 'javascript')
+      return `${base}/language/typescript/ts.worker.js`;
+    return `${base}/editor/editor.worker.js`;
+  },
+};
+
 // ─── Monaco Loader config (must run before require calls) ───────
 require.config({ paths: { vs: "../../node_modules/monaco-editor/min/vs" } });
 
@@ -3221,8 +3239,8 @@ declare const global: typeof globalThis & Record<string, any>;
       enabled: true,
       independentColorPoolPerBracketType: true,
     },
-    autoClosingBrackets: "languageDefined",
-    autoClosingQuotes: "languageDefined",
+    autoClosingBrackets: "always",
+    autoClosingQuotes: "always",
     autoClosingDelete: "always",
     autoSurround: "languageDefined",
 
@@ -3457,6 +3475,146 @@ declare const global: typeof globalThis & Record<string, any>;
       if (typeof Marketplace !== "undefined") Marketplace.toggle();
     },
   );
+
+  // ── Language configurations (auto-closing pairs) ────────────────────────────
+  // Set these here so they work even if language workers haven't started yet
+  const _jsLangConfig = {
+    autoClosingPairs: [
+      { open: '(',  close: ')' },
+      { open: '[',  close: ']' },
+      { open: '{',  close: '}' },
+      { open: '"',  close: '"', notIn: ['string', 'comment'] },
+      { open: "'",  close: "'", notIn: ['string', 'comment'] },
+      { open: '`',  close: '`', notIn: ['string'] },
+    ],
+    surroundingPairs: [
+      { open: '(', close: ')' }, { open: '[', close: ']' },
+      { open: '{', close: '}' }, { open: '"', close: '"' },
+      { open: "'", close: "'" }, { open: '`', close: '`' },
+    ],
+  };
+  for (const lang of ['javascript', 'typescript', 'javascriptreact', 'typescriptreact']) {
+    try { monaco.languages.setLanguageConfiguration(lang, _jsLangConfig); } catch {}
+  }
+  // JSON
+  try {
+    monaco.languages.setLanguageConfiguration('json', {
+      autoClosingPairs: [
+        { open: '{', close: '}' }, { open: '[', close: ']' },
+        { open: '"', close: '"' },
+      ],
+      surroundingPairs: [
+        { open: '{', close: '}' }, { open: '[', close: ']' },
+        { open: '"', close: '"' },
+      ],
+    });
+  } catch {}
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  FOCUS RECOVERY SYSTEM
+  //  Prevents the editor from getting "stuck" (cursor visible but no typing).
+  //  Root causes: overlay close without returning focus, tab click stealing
+  //  focus, chord state getting stuck, window blur/focus cycles.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  window._refocusEditor = function () {
+    if (!window.editor) return;
+    // Reset any stuck keybinding chord state first
+    window.NoterKeybindings?.reset?.();
+    // Primary: Monaco's own focus method
+    window.editor.focus();
+    // Fallback: directly focus Monaco's hidden textarea (always works)
+    setTimeout(() => {
+      const inputArea = document.querySelector('.monaco-editor .inputarea');
+      if (inputArea && document.activeElement !== inputArea) {
+        inputArea.focus({ preventScroll: true });
+      }
+    }, 30);
+  };
+
+  // 1. Click anywhere in the editor area → ensure Monaco gets focus
+  document.getElementById('editor-area')?.addEventListener('mousedown', (e) => {
+    // Don't interfere with Monaco's own mousedown handling
+    const inMonaco = !!e.target.closest('.monaco-editor');
+    if (!inMonaco) setTimeout(window._refocusEditor, 10);
+  }, false);
+
+  // Also clicking the editor wrapper directly
+  document.getElementById('editor-wrapper')?.addEventListener('click', () => {
+    setTimeout(window._refocusEditor, 10);
+  }, false);
+
+  // 2. App window regains focus → restore editor (if no overlay open)
+  window.addEventListener('focus', () => {
+    const anyOverlay = document.querySelector(
+      '#cp-overlay.cp-visible, #settings-overlay.settings-visible, ' +
+      '#kb-overlay.kb-visible, #welcome-overlay.welcome-visible'
+    );
+    if (!anyOverlay) setTimeout(window._refocusEditor, 200);
+  });
+
+  // 3. Escape key with no overlay open = emergency refocus
+  //    (Runs in bubble phase so Monaco's own Escape handling fires first)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    // If Monaco is focused, let it handle Escape (close suggestions, find, etc.)
+    if (document.activeElement?.closest('.monaco-editor')) return;
+    // If any overlay is open, let the overlay handle Escape
+    const anyOverlay = document.querySelector(
+      '#cp-overlay.cp-visible, #settings-overlay.settings-visible, ' +
+      '#kb-overlay.kb-visible, #welcome-overlay.welcome-visible'
+    );
+    if (anyOverlay) return;
+    // Editor is "stuck" — recover
+    e.preventDefault();
+    window._refocusEditor();
+  }, false);
+
+  // 4. After every tab switch → refocus editor
+  //    Patch TabManager.activate to always restore focus after switching
+  const _origActivate = TabManager.activate.bind(TabManager);
+  TabManager.activate = function (id) {
+    _origActivate(id);
+    setTimeout(window._refocusEditor, 60);
+  };
+
+  // 5. Monaco model change → refocus (catches model-swap edge cases)
+  window.editor.onDidChangeModel(() => setTimeout(window._refocusEditor, 50));
+
+  // 6. Statusbar / breadcrumb clicks steal focus — recover after interaction
+  document.getElementById('statusbar')?.addEventListener('click', () =>
+    setTimeout(window._refocusEditor, 80), false
+  );
+  document.getElementById('breadcrumb')?.addEventListener('click', (e) => {
+    if (!e.target.closest('a, button')) setTimeout(window._refocusEditor, 80);
+  }, false);
+
+  // 7. Editor visible but unfocused watcher — poll every 4 s while page is visible
+  //    Catches cases where no specific event fires (e.g. native dialog closes)
+  let _focusWatcher = null;
+  function _startFocusWatcher() {
+    _focusWatcher = setInterval(() => {
+      if (document.hidden) return;
+      const anyOverlay = document.querySelector(
+        '#cp-overlay.cp-visible, #settings-overlay.settings-visible, ' +
+        '#kb-overlay.kb-visible, #welcome-overlay.welcome-visible'
+      );
+      if (anyOverlay) return;
+      // If focus is on body or some random element (not Monaco, not a real input)
+      const ae  = document.activeElement;
+      const tag = ae?.tagName?.toLowerCase();
+      const inMonaco  = !!ae?.closest('.monaco-editor');
+      const inInput   = ['input','textarea','select','button'].includes(tag);
+      const inOverlay = !!ae?.closest('[id$="-overlay"],[id$="-panel"]');
+      if (!inMonaco && !inInput && !inOverlay) {
+        window._refocusEditor();
+      }
+    }, 4000);
+  }
+  _startFocusWatcher();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && !_focusWatcher) _startFocusWatcher();
+  });
 
   // Notify feature modules that Monaco is ready so they can register addCommand shortcuts
   document.dispatchEvent(new CustomEvent("monaco-ready"));

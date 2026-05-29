@@ -281,7 +281,7 @@ window.KeybindingsUI = (() => {
   function close() {
     if (_recording) _cancelRec();
     _panel?.classList.remove('kb-visible');
-    window.editor?.focus();
+    setTimeout(() => (window._refocusEditor || (() => window.editor?.focus()))(), 50);
   }
 
   // ── Register command (after registry is ready) ────────────────

@@ -108,7 +108,35 @@ window.NoterKeybindings = (() => {
   let _chordPending = null;
   let _chordTimer   = null;
 
-  // Keys Monaco handles natively — let Monaco's own keymap win when editor focused
+  // ── Cached index (rebuilt only when bindings change) ──────────
+  let _cachedIdx            = null;
+  let _cachedChordStarters  = null;
+
+  function _invalidateCache() { _cachedIdx = null; _cachedChordStarters = null; }
+
+  function _getIdx() {
+    if (_cachedIdx) return _cachedIdx;
+    const idx = new Map();
+    for (const b of DEFAULTS) {
+      const eff = b.command in _user ? _user[b.command] : b.key;
+      if (eff) idx.set(eff, b.command);
+    }
+    for (const b of _ext) idx.set(b.key, b.command);
+    _cachedIdx = idx;
+    return idx;
+  }
+
+  function _getChordStarters() {
+    if (_cachedChordStarters) return _cachedChordStarters;
+    const starters = new Set();
+    for (const k of _getIdx().keys()) {
+      if (k.includes(' ')) starters.add(k.split(' ')[0]);
+    }
+    _cachedChordStarters = starters;
+    return starters;
+  }
+
+  // Keys Monaco handles natively when editor is focused — we step aside
   const MONACO_OWNED = new Set([
     'ctrl+z','ctrl+y','ctrl+x','ctrl+c','ctrl+v','ctrl+a',
     'ctrl+f','ctrl+h','ctrl+d','ctrl+/',
@@ -116,6 +144,14 @@ window.NoterKeybindings = (() => {
     'ctrl+shift+k','ctrl+space','ctrl+shift+space','ctrl+shift+[','ctrl+shift+]',
     'ctrl+shift+l','ctrl+alt+up','ctrl+alt+down','ctrl+f2',
     'f2','f3','shift+f3','shift+f12','alt+shift+f','shift+alt+a','ctrl+shift+\\',
+    // Typing aids — never intercept these
+    'backspace','delete','enter','tab','escape',
+    'up','down','left','right',
+    'shift+up','shift+down','shift+left','shift+right',
+    'ctrl+up','ctrl+down','ctrl+left','ctrl+right',
+    'ctrl+shift+up','ctrl+shift+down','ctrl+shift+left','ctrl+shift+right',
+    'home','end','pageup','pagedown',
+    'shift+home','shift+end','shift+pageup','shift+pagedown',
   ]);
 
   // ── Normalise keyboard event → "ctrl+shift+k" style string ───
@@ -127,6 +163,7 @@ window.NoterKeybindings = (() => {
     const RAW = {
       ' ':'space','escape':'escape','enter':'enter','tab':'tab',
       'backspace':'backspace','delete':'delete',
+      'home':'home','end':'end','pageup':'pageup','pagedown':'pagedown',
       'arrowup':'up','arrowdown':'down','arrowleft':'left','arrowright':'right',
       'f1':'f1','f2':'f2','f3':'f3','f4':'f4','f5':'f5','f6':'f6',
       'f7':'f7','f8':'f8','f9':'f9','f10':'f10','f11':'f11','f12':'f12',
@@ -137,60 +174,61 @@ window.NoterKeybindings = (() => {
     return p.length ? p.join('+') : '';
   }
 
-  // ── Build live key → commandId index ──────────────────────────
-  function _buildIndex() {
-    const idx = new Map();
-    for (const b of DEFAULTS) {
-      const eff = b.command in _user ? _user[b.command] : b.key;
-      if (eff) idx.set(eff, b.command);
-    }
-    for (const b of _ext) idx.set(b.key, b.command);
-    return idx;
-  }
-
   // ── Global keydown handler (capture phase) ────────────────────
   function _onKey(e) {
-    const tag = (e.target?.tagName || '').toLowerCase();
-    // Allow native input behaviour unless a modifier is held
-    if (['input','textarea','select'].includes(tag) && !e.ctrlKey && !e.metaKey && !e.altKey) return;
+    try {
+      // Never intercept pure typing in real inputs
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (['input','textarea','select'].includes(tag) && !e.ctrlKey && !e.metaKey && !e.altKey) return;
 
-    const key = _norm(e);
-    if (!key || ['ctrl','alt','shift','meta'].includes(key)) return;
+      const key = _norm(e);
+      if (!key || ['ctrl','alt','shift','meta'].includes(key)) return;
 
-    const idx          = _buildIndex();
-    const monacoFocus  = !!document.activeElement?.closest('.monaco-editor');
+      // Never block single-char keys (letters, digits, symbols) — only combos
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && key.length <= 2) return;
 
-    // Complete a pending chord
-    if (_chordPending) {
-      const chord = `${_chordPending} ${key}`;
-      clearTimeout(_chordTimer);
-      _chordPending = null;
-      if (idx.has(chord)) {
-        e.preventDefault(); e.stopPropagation();
-        NoterCommands.execute(idx.get(chord));
+      const idx          = _getIdx();
+      const monacoFocus  = !!document.activeElement?.closest('.monaco-editor');
+
+      // Always let Monaco handle its own keys when it's focused
+      if (monacoFocus && MONACO_OWNED.has(key)) return;
+
+      // ── Chord completion ─────────────────────────────────────
+      if (_chordPending) {
+        const chord = `${_chordPending} ${key}`;
+        clearTimeout(_chordTimer);
+        _chordPending = null;
+        if (idx.has(chord)) {
+          e.preventDefault(); e.stopImmediatePropagation();
+          setTimeout(() => NoterCommands.execute(idx.get(chord)), 0);
+          return;
+        }
+        // Unknown chord second key → let it through normally
         return;
       }
-      // Not a known chord — fall through to try the key alone
+
+      // ── Chord starter detection ───────────────────────────────
+      if (_getChordStarters().has(key)) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        _chordPending = key;
+        clearTimeout(_chordTimer);
+        _chordTimer = setTimeout(() => { _chordPending = null; }, 1500);
+        _showChordHint(key);
+        return;
+      }
+
+      // ── Regular binding ───────────────────────────────────────
+      if (!idx.has(key)) return;
+
+      e.preventDefault(); e.stopImmediatePropagation();
+      setTimeout(() => NoterCommands.execute(idx.get(key)), 0);
+
+    } catch (err) {
+      // Safety: never let our handler crash and leave the keyboard in a broken state
+      console.warn('[Keybindings] Error in keydown handler:', err);
+      _chordPending = null;
+      clearTimeout(_chordTimer);
     }
-
-    // Check if key is the start of any chord
-    const isChordStarter = [...idx.keys()].some(k => k.includes(' ') && k.split(' ')[0] === key);
-    if (isChordStarter) {
-      e.preventDefault(); e.stopPropagation();
-      _chordPending = key;
-      _chordTimer   = setTimeout(() => { _chordPending = null; }, 1500);
-      _showChordHint(key);
-      return;
-    }
-
-    // Normal binding
-    if (!idx.has(key)) return;
-
-    // Let Monaco handle keys it owns when focused
-    if (monacoFocus && MONACO_OWNED.has(key)) return;
-
-    e.preventDefault(); e.stopPropagation();
-    NoterCommands.execute(idx.get(key));
   }
 
   // ── Chord hint ────────────────────────────────────────────────
@@ -215,17 +253,27 @@ window.NoterKeybindings = (() => {
   // ── Public: user binding management ──────────────────────────
   function setUserBinding(commandId, key) {
     _user[commandId] = key;
+    _invalidateCache();
     _save();
   }
 
   function resetBinding(commandId) {
     delete _user[commandId];
+    _invalidateCache();
     _save();
   }
 
   function resetAll() {
     _user = {};
+    _invalidateCache();
     _save();
+  }
+
+  // Emergency reset — clears any stuck chord state and re-enables keyboard
+  function reset() {
+    _chordPending = null;
+    clearTimeout(_chordTimer);
+    _chordTimer = null;
   }
 
   function getEffectiveKey(commandId) {
@@ -283,7 +331,7 @@ window.NoterKeybindings = (() => {
   return {
     DEFAULTS,
     getAll, getEffectiveKey, getConflicts,
-    setUserBinding, resetBinding, resetAll,
+    setUserBinding, resetBinding, resetAll, reset,
     registerExtension,
     exportBindings, importBindings,
   };
