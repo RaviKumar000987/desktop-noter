@@ -20,7 +20,7 @@ const IntelliSense = (() => {
   function _getWorker() {
     if (_worker) return _worker;
     try {
-      const url = new URL("../workers/indexer.worker.js", window.location.href).href;
+      const url = new URL("../../workers/indexer.worker.js", window.location.href).href;
       _worker = new Worker(url);
       _worker.onmessage = ({ data: { id, results } }) => {
         const resolve = _workerPending.get(id);
@@ -613,6 +613,85 @@ const IntelliSense = (() => {
     'endsWith':      '**String.prototype.endsWith()**\nChecks if the string ends with the given value.',
     'padStart':      '**String.prototype.padStart()**\nPads the beginning of the string to the given length.',
     'padEnd':        '**String.prototype.padEnd()**\nPads the end of the string to the given length.',
+    // Array extras
+    'at':            '**Array.prototype.at()**\nReturns the element at the given index (supports negative indices).',
+    'fill':          '**Array.prototype.fill()**\nFills all array elements with a static value.',
+    'indexOf':       '**Array.prototype.indexOf()**\nReturns the first index of the given element, or -1.',
+    'lastIndexOf':   '**Array.prototype.lastIndexOf()**\nReturns the last index of the given element, or -1.',
+    'copyWithin':    '**Array.prototype.copyWithin()**\nShallow-copies part of the array to another location.',
+    'entries':       '**Array.prototype.entries()**\nReturns an iterator of [index, value] pairs.',
+    'keys':          '**Array.prototype.keys()**\nReturns an iterator of array indices.',
+    'values':        '**Array.prototype.values()**\nReturns an iterator of array values.',
+    'findLast':      '**Array.prototype.findLast()**\nReturns the last element satisfying the test function.',
+    'findLastIndex': '**Array.prototype.findLastIndex()**\nReturns the last index satisfying the test function.',
+    'toSorted':      '**Array.prototype.toSorted()**\nReturns a sorted copy without mutating the original.',
+    'toReversed':    '**Array.prototype.toReversed()**\nReturns a reversed copy without mutating the original.',
+    'with':          '**Array.prototype.with()**\nReturns a copy with one element replaced at the given index.',
+    'Array.from':    '**Array.from()**\nCreates an array from an iterable or array-like object.',
+    'Array.isArray': '**Array.isArray()**\nDetermines whether the value is an Array.',
+    'Array.of':      '**Array.of()**\nCreates an array from the given arguments.',
+    // Object extras
+    'Object.create':       '**Object.create()**\nCreates a new object with the given prototype.',
+    'Object.defineProperty':'**Object.defineProperty()**\nDefines or modifies a property descriptor on an object.',
+    'Object.fromEntries':  '**Object.fromEntries()**\nTransforms a list of key-value pairs into an object.',
+    'Object.hasOwn':       '**Object.hasOwn()**\nReturns true if the object has the given own property.',
+    'Object.is':           '**Object.is()**\nDetermines if two values are the same value (like === but handles NaN and ±0).',
+    'Object.keys':         '**Object.keys()**\nReturns an array of own enumerable property names.',
+    'Object.values':       '**Object.values()**\nReturns an array of own enumerable property values.',
+    'Object.entries':      '**Object.entries()**\nReturns an array of own enumerable [key, value] pairs.',
+    // String extras
+    'matchAll':      '**String.prototype.matchAll()**\nReturns an iterator of all regex matches including capture groups.',
+    'match':         '**String.prototype.match()**\nMatches string against a regex; returns matches or null.',
+    'repeat':        '**String.prototype.repeat()**\nReturns the string repeated n times.',
+    'slice_str':     '**String.prototype.slice()**\nExtracts a section of a string and returns it.',
+    'substring':     '**String.prototype.substring()**\nReturns characters between two indices.',
+    'toLowerCase':   '**String.prototype.toLowerCase()**\nConverts string to lowercase.',
+    'toUpperCase':   '**String.prototype.toUpperCase()**\nConverts string to uppercase.',
+    'charAt':        '**String.prototype.charAt()**\nReturns the character at the specified index.',
+    'charCodeAt':    '**String.prototype.charCodeAt()**\nReturns the UTF-16 code unit at the index.',
+    'normalize':     '**String.prototype.normalize()**\nReturns the Unicode Normalization Form of the string.',
+    // React Hooks
+    'useState':      '**React.useState(initialValue)**\nReturns [state, setState]. Re-renders on state change.\n\n```tsx\nconst [count, setCount] = useState(0);\n```',
+    'useEffect':     '**React.useEffect(effect, deps?)**\nRuns after render. Optionally return a cleanup function.\n\n```tsx\nuseEffect(() => { /* side effect */ return () => { /* cleanup */ }; }, [dep]);\n```',
+    'useCallback':   '**React.useCallback(fn, deps)**\nMemoizes a callback function. Re-creates only when deps change.',
+    'useMemo':       '**React.useMemo(fn, deps)**\nMemoizes an expensive computed value. Re-computes when deps change.',
+    'useRef':        '**React.useRef(initial?)**\nReturns a mutable ref object. `ref.current` persists across renders.',
+    'useContext':    '**React.useContext(Context)**\nSubscribes to a React context value.',
+    'useReducer':    '**React.useReducer(reducer, init)**\nAlternative to useState for complex state logic.',
+    'useId':         '**React.useId()**\nGenerates a stable, unique ID for accessibility attributes.',
+    'useTransition': '**React.useTransition()**\nMarks updates as non-urgent to keep the UI responsive.',
+    'useDeferredValue':'**React.useDeferredValue(value)**\nDefers re-rendering of a non-urgent part of the UI.',
+    'useLayoutEffect':'**React.useLayoutEffect(effect, deps?)**\nLike useEffect but fires synchronously after DOM mutations.',
+    'useImperativeHandle':'**React.useImperativeHandle(ref, fn, deps?)**\nCustomizes the instance exposed when using forwardRef.',
+    'useDebugValue': '**React.useDebugValue(value)**\nDisplays a label for custom hooks in React DevTools.',
+    // Fetch API extras
+    'Response':      '**Response**\nRepresents a response to a fetch request. Key methods: `.json()`, `.text()`, `.blob()`, `.arrayBuffer()`.',
+    'Request':       '**Request**\nRepresents a resource request. Passed to `fetch(request)`.',
+    'Headers':       '**Headers**\nRepresents HTTP headers. Methods: `get()`, `set()`, `append()`, `has()`, `delete()`.',
+    'AbortController':'**AbortController**\nAllows aborting a fetch request with `.abort()`. Pass `.signal` to fetch options.',
+    'URL':           '**URL**\nWeb API for URL parsing and construction. `new URL(href, base)`.',
+    'URLSearchParams':'**URLSearchParams**\nUtility to work with URL query strings.',
+    // Storage
+    'localStorage':  '**localStorage**\nPersistent key-value storage. Survives page reloads. Methods: `getItem`, `setItem`, `removeItem`, `clear`.',
+    'sessionStorage':'**sessionStorage**\nSession-scoped key-value storage. Cleared when tab closes.',
+    'IndexedDB':     '**IndexedDB**\nLow-level API for client-side storage of significant amounts of structured data.',
+    // Timer
+    'setTimeout':    '**setTimeout(fn, delay, ...args)**\nCalls fn after at least delay milliseconds. Returns a timer ID.',
+    'clearTimeout':  '**clearTimeout(id)**\nCancels a timeout created with setTimeout.',
+    'setInterval':   '**setInterval(fn, delay, ...args)**\nCalls fn repeatedly every delay milliseconds. Returns an interval ID.',
+    'clearInterval': '**clearInterval(id)**\nCancels an interval created with setInterval.',
+    'requestAnimationFrame':'**requestAnimationFrame(fn)**\nSchedules fn to run before the next repaint for smooth animation.',
+    // Events
+    'addEventListener':    '**EventTarget.addEventListener(type, listener, options?)**\nAttaches an event handler to the element.',
+    'removeEventListener': '**EventTarget.removeEventListener(type, listener)**\nRemoves an event handler from the element.',
+    'dispatchEvent':       '**EventTarget.dispatchEvent(event)**\nDispatches a synthetic event at the target.',
+    'CustomEvent':         '**CustomEvent(type, { detail })**\nCreates a custom event with optional attached data.',
+    // Node.js common
+    'require':       '**require(id)**\nLoads a CommonJS module. Built-in modules: `fs`, `path`, `os`, `http`, `crypto`, `events`.',
+    '__dirname':     '**__dirname**\nAbsolute path of the directory containing the current module file.',
+    '__filename':    '**__filename**\nAbsolute path of the current module file.',
+    'process':       '**process**\nNode.js global. Key properties: `env`, `argv`, `cwd()`, `exit()`, `platform`, `version`.',
+    'Buffer':        '**Buffer**\nNode.js global for binary data. `Buffer.from()`, `Buffer.alloc()`, `buf.toString()`.',
   };
 
   // ════════════════════════════════════════════════════════════════════════
@@ -750,13 +829,76 @@ const IntelliSense = (() => {
   }
 
   function _registerHoverProvider() {
+    // JS / TS / JSX / TSX — method and API docs
     ['javascript','typescript','javascriptreact','typescriptreact'].forEach(lang => {
       monaco.languages.registerHoverProvider(lang, {
         provideHover(model, position) {
           const word = model.getWordAtPosition(position);
           if (!word) return null;
-          // Check word and word.word on previous character for dotted access
-          const doc = _HOVER_DOCS[word.word];
+          const line   = model.getLineContent(position.lineNumber);
+          const before = line.slice(0, word.startColumn - 1);
+
+          // Check dotted access: "arr.map" → look up "map"; also bare word
+          const dotKey = before.endsWith('.') ? word.word : null;
+          const doc    = _HOVER_DOCS[word.word] || (dotKey ? _HOVER_DOCS[dotKey] : null);
+          if (!doc) return null;
+          return {
+            range: new monaco.Range(
+              position.lineNumber, word.startColumn,
+              position.lineNumber, word.endColumn
+            ),
+            contents: [{ value: doc }],
+          };
+        },
+      });
+    });
+
+    // CSS / SCSS / LESS — property docs
+    const CSS_PROP_DOCS = {
+      display:        '**`display`** — Controls how an element is rendered in the layout flow.\n\nCommon values: `block`, `inline`, `flex`, `grid`, `inline-flex`, `none`.',
+      position:       '**`position`** — Sets how an element is positioned.\n\n`relative` — offset from normal flow · `absolute` — relative to nearest positioned ancestor · `fixed` — relative to viewport · `sticky` — hybrid scrolling behavior.',
+      flexDirection:  '**`flex-direction`** — Defines the main axis of a flex container. `row` (default) | `column` | `row-reverse` | `column-reverse`.',
+      'flex-direction':'**`flex-direction`** — Defines the main axis of a flex container.',
+      justifyContent: '**`justify-content`** — Aligns flex/grid items along the main axis.',
+      'justify-content':'**`justify-content`** — Aligns items along the main axis.\n\nValues: `flex-start`, `flex-end`, `center`, `space-between`, `space-around`, `space-evenly`.',
+      alignItems:     '**`align-items`** — Aligns flex/grid items along the cross axis.',
+      'align-items':  '**`align-items`** — Aligns flex items along the cross axis.\n\nValues: `stretch`, `flex-start`, `flex-end`, `center`, `baseline`.',
+      gap:            '**`gap`** — Shorthand for `row-gap` and `column-gap`. Sets spacing between flex/grid items.',
+      overflow:       '**`overflow`** — Controls clipping of content that overflows an element\'s box.\n\nValues: `visible`, `hidden`, `scroll`, `auto`.',
+      transform:      '**`transform`** — Applies 2D/3D transformations: `translate()`, `rotate()`, `scale()`, `skew()`, `matrix()`.',
+      transition:     '**`transition`** — Smoothly animates CSS property changes.\n\nSyntax: `property duration timing-function delay`.',
+      animation:      '**`animation`** — Applies a CSS keyframe animation.\n\nSyntax: `name duration timing-function delay iteration-count direction fill-mode`.',
+      'z-index':      '**`z-index`** — Controls stacking order of positioned elements. Higher = on top. Only works on positioned elements.',
+      opacity:        '**`opacity`** — Transparency level from `0` (invisible) to `1` (fully visible).',
+      'border-radius':'**`border-radius`** — Rounds the corners of an element\'s border box. Accepts `px`, `%`, or `em`.',
+      'box-shadow':   '**`box-shadow`** — Adds shadow effects around an element.\n\nSyntax: `offset-x offset-y blur-radius spread-radius color`.',
+      'grid-template-columns':'**`grid-template-columns`** — Defines the columns of a grid.\n\nExamples: `repeat(3, 1fr)`, `200px 1fr`, `auto auto`.',
+      'grid-template-rows':'**`grid-template-rows`** — Defines the rows of a grid.',
+      'background-image':'**`background-image`** — Sets background image(s).\n\nExamples: `url(img.png)`, `linear-gradient(to right, #000, #fff)`.',
+      'object-fit':   '**`object-fit`** — Specifies how `<img>` or `<video>` content fits its container.\n\nValues: `fill`, `contain`, `cover`, `none`, `scale-down`.',
+      'user-select':  '**`user-select`** — Controls text selection by the user. `none` prevents selection.',
+      'pointer-events':'**`pointer-events`** — Controls whether an element can be the target of mouse/touch events. `none` disables all interaction.',
+      'will-change':  '**`will-change`** — Hints to the browser about which properties will change, enabling GPU-layer promotion.',
+      'clip-path':    '**`clip-path`** — Clips an element to a shape. Supports `circle()`, `polygon()`, `inset()`, `path()`.',
+      'backdrop-filter':'**`backdrop-filter`** — Applies graphical effects to the area behind an element. `blur()`, `brightness()`, etc.',
+      'mix-blend-mode':'**`mix-blend-mode`** — Controls how an element\'s content blends with its background.',
+      'scroll-behavior':'**`scroll-behavior`** — Controls scroll animation. `smooth` enables animated scrolling.',
+      'aspect-ratio': '**`aspect-ratio`** — Sets the preferred aspect ratio. Example: `aspect-ratio: 16 / 9`.',
+      'container':    '**`container`** — CSS Containment. Enables container queries with `container-type` and `container-name`.',
+    };
+
+    ['css','scss','less'].forEach(lang => {
+      monaco.languages.registerHoverProvider(lang, {
+        provideHover(model, position) {
+          const word = model.getWordAtPosition(position);
+          if (!word) return null;
+          // CSS properties are hyphenated — get the full property including hyphens
+          const line   = model.getLineContent(position.lineNumber);
+          const propRe = /([\w-]+)(?:\s*:)/;
+          const lineUp = line.slice(0, position.column + 30);
+          const m      = propRe.exec(lineUp.slice(Math.max(0, position.column - 30)));
+          const prop   = m ? m[1] : word.word;
+          const doc    = CSS_PROP_DOCS[prop] || CSS_PROP_DOCS[word.word];
           if (!doc) return null;
           return {
             range: new monaco.Range(

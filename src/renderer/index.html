@@ -9,10 +9,11 @@
     />
     <title>Noter</title>
 
-    <!-- App styles -->
-    <link rel="stylesheet" href="./styles/style.css" />
-    <link rel="stylesheet" href="./styles/features.css" />
-    <link rel="stylesheet" href="./styles/marketplace.css" />
+    <!-- ── Styles (src/styles/) ── -->
+    <link rel="stylesheet" href="../styles/style.css" />
+    <link rel="stylesheet" href="../styles/features.css" />
+    <link rel="stylesheet" href="../styles/marketplace.css" />
+    <link rel="stylesheet" href="../styles/phase7.css" />
 
     <!-- xterm.js — MUST load before Monaco so UMD globals are set first -->
     <link rel="stylesheet" href="../../node_modules/xterm/css/xterm.css" />
@@ -298,56 +299,105 @@
       </div>
     </div>
 
-    <!-- ── Scripts (Monaco AFTER xterm so UMD globals are already set) ── -->
+    <!-- ════════════════════════════════════════════════════════
+         SCRIPTS  —  load order is critical, do not reorder
+         Paths are relative to src/renderer/index.html
+    ════════════════════════════════════════════════════════ -->
+
+    <!-- Monaco loader (must come before everything that uses it) -->
     <script src="../../node_modules/monaco-editor/min/vs/loader.js"></script>
 
-    <!-- ── Enterprise performance modules (load before app.js) ── -->
-    <script src="./modules/model-manager.js"></script>
-    <script src="./modules/performance-monitor.js"></script>
-    <script src="./modules/crash-recovery.js"></script>
+    <!-- ── 1. Shared constants (src/shared/) ──────────────── -->
+    <script src="../shared/constants.js"></script>
 
-    <script src="./app.js"></script>
-    <script src="./modules/terminal.js"></script>
-    <script src="./modules/split-editor.js"></script>
-    <script src="./modules/global-search.js"></script>
-    <script src="./modules/command-palette.js"></script>
-    <script src="./modules/marketplace.js"></script>
-    <script src="./modules/context-menu.js"></script>
-    <script src="./modules/activity-bar.js"></script>
-    <script src="./modules/settings-ui.js"></script>
-    <!-- ── Phase 4: IntelliSense core engine (loads before extensions) ── -->
-    <script src="./modules/intellisense.js"></script>
+    <!-- ── 2. Core foundations — load before app.js ──────── -->
+    <!--    Command registry  (src/renderer/ui/) -->
+    <script src="./ui/command-registry.js"></script>
+    <!--    Keybindings engine (src/renderer/ui/) -->
+    <script src="./ui/keybindings.js"></script>
+    <!--    Settings manager   (src/renderer/settings/) -->
+    <script src="./settings/settings-manager.js"></script>
 
-    <!-- ── Official Extensions (each extension is its own file) ── -->
-    <script src="./extensions/code-runner.js"></script>
-    <script src="./extensions/error-lens.js"></script>
-    <script src="./extensions/prettier-pro.js"></script>
-    <script src="./extensions/git-insights.js"></script>
-    <script src="./extensions/live-preview.js"></script>
-    <script src="./extensions/react-snippets.js"></script>
-    <script src="./extensions/dsa-forge.js"></script>
-    <script src="./extensions/theme-studio.js"></script>
-    <script src="./extensions/workspace-notes.js"></script>
-    <script src="./extensions/project-dashboard.js"></script>
-    <script src="./extensions/file-icons-pro.js"></script>
-    <script src="./extensions/emmet-plus.js"></script>
-    <script src="./extensions/node-toolkit.js"></script>
-    <script src="./extensions/python-power.js"></script>
-    <script src="./extensions/cpp-toolkit.js"></script>
-    <script src="./extensions/java-studio.js"></script>
-    <script src="./extensions/dotnet-runner.js"></script>
-    <script src="./extensions/electron-toolkit.js"></script>
-    <script src="./extensions/electron-security.js"></script>
-    <script src="./extensions/markdown-pro.js"></script>
-    <script src="./extensions/bracket-colors.js"></script>
-    <script src="./extensions/json-wizard.js"></script>
-    <!-- ── Phase 4: IntelliSense extensions ── -->
-    <script src="./extensions/js-intellisense.js"></script>
-    <script src="./extensions/python-intellisense.js"></script>
-    <script src="./extensions/web-intellisense.js"></script>
-    <script src="./extensions/cpp-intellisense.js"></script>
-    <script src="./extensions/java-intellisense.js"></script>
-    <!-- Extension Runtime — loads after all extensions are registered -->
-    <script src="./extensions/index.js"></script>
+    <!-- ── 3. Enterprise: model + perf + recovery ─────────── -->
+    <!--    Monaco model manager  (src/renderer/editor/) -->
+    <script src="./editor/model-manager.js"></script>
+    <!--    Performance monitor   (src/renderer/ui/) -->
+    <script src="./ui/performance-monitor.js"></script>
+    <!--    Crash recovery        (src/renderer/ui/) -->
+    <script src="./ui/crash-recovery.js"></script>
+
+    <!-- ── 4. Core app bootstrap  (src/renderer/core/) ────── -->
+    <script src="./core/app.js"></script>
+
+    <!-- ── 5. Feature modules ─────────────────────────────── -->
+    <!--    Terminal              (src/renderer/terminal/) -->
+    <script src="./terminal/terminal.js"></script>
+    <!--    Split editor          (src/renderer/editor/) -->
+    <script src="./editor/split-editor.js"></script>
+    <!--    Global search         (src/renderer/search/) -->
+    <script src="./search/global-search.js"></script>
+    <!--    Command palette       (src/renderer/ui/) -->
+    <script src="./ui/command-palette.js"></script>
+    <!--    Marketplace           (src/renderer/marketplace/) -->
+    <script src="./marketplace/marketplace.js"></script>
+    <!--    Context menu          (src/renderer/explorer/) -->
+    <script src="./explorer/context-menu.js"></script>
+    <!--    Activity bar          (src/renderer/ui/) -->
+    <script src="./ui/activity-bar.js"></script>
+    <!--    Settings UI           (src/renderer/settings/) -->
+    <script src="./settings/settings-ui.js"></script>
+    <!--    Keybindings UI        (src/renderer/ui/) -->
+    <script src="./ui/keybindings-ui.js"></script>
+    <!--    Welcome page          (src/renderer/ui/) -->
+    <script src="./ui/welcome.js"></script>
+
+    <!-- ── 6. IntelliSense engine (src/renderer/editor/) ──── -->
+    <script src="./editor/intellisense.js"></script>
+
+    <!-- ── 7. Extensions  (src/extensions/) ──────────────── -->
+    <!-- Code quality & formatting -->
+    <script src="../extensions/code-runner.js"></script>
+    <script src="../extensions/error-lens.js"></script>
+    <script src="../extensions/prettier-pro.js"></script>
+    <!-- Source control -->
+    <script src="../extensions/git-insights.js"></script>
+    <!-- Web & preview -->
+    <script src="../extensions/live-preview.js"></script>
+    <script src="../extensions/emmet-plus.js"></script>
+    <!-- Snippets & productivity -->
+    <script src="../extensions/react-snippets.js"></script>
+    <script src="../extensions/dsa-forge.js"></script>
+    <!-- Appearance -->
+    <script src="../extensions/theme-studio.js"></script>
+    <script src="../extensions/bracket-colors.js"></script>
+    <script src="../extensions/file-icons-pro.js"></script>
+    <!-- Workspace tools -->
+    <script src="../extensions/workspace-notes.js"></script>
+    <script src="../extensions/project-dashboard.js"></script>
+    <!-- Language toolkits -->
+    <script src="../extensions/node-toolkit.js"></script>
+    <script src="../extensions/python-power.js"></script>
+    <script src="../extensions/cpp-toolkit.js"></script>
+    <script src="../extensions/java-studio.js"></script>
+    <script src="../extensions/dotnet-runner.js"></script>
+    <script src="../extensions/electron-toolkit.js"></script>
+    <script src="../extensions/electron-security.js"></script>
+    <script src="../extensions/markdown-pro.js"></script>
+    <script src="../extensions/json-wizard.js"></script>
+    <!-- IntelliSense language providers -->
+    <script src="../extensions/js-intellisense.js"></script>
+    <script src="../extensions/python-intellisense.js"></script>
+    <script src="../extensions/web-intellisense.js"></script>
+    <script src="../extensions/cpp-intellisense.js"></script>
+    <script src="../extensions/java-intellisense.js"></script>
+    <!-- Extension runtime — MUST load after all extensions -->
+    <script src="../extensions/index.js"></script>
+
+    <!-- ── 8. Init (after DOM + all modules loaded) ────────── -->
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        window.NoterWelcome?.init?.();
+      });
+    </script>
   </body>
 </html>
