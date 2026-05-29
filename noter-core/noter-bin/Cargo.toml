@@ -1,0 +1,28 @@
+[package]
+name = "noter-bin"
+description = "Noter Core — main binary entry point"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "noter-core"
+path = "src/main.rs"
+
+[dependencies]
+noter-search      = { path = "../crates/noter-search" }
+noter-indexer     = { path = "../crates/noter-indexer" }
+noter-symboldb    = { path = "../crates/noter-symboldb" }
+noter-git         = { path = "../crates/noter-git" }
+noter-watcher     = { path = "../crates/noter-watcher" }
+noter-diagnostics = { path = "../crates/noter-diagnostics" }
+noter-graph       = { path = "../crates/noter-graph" }
+noter-ai-context  = { path = "../crates/noter-ai-context" }
+noter-ext-host    = { path = "../crates/noter-ext-host" }
+noter-scheduler   = { path = "../crates/noter-scheduler" }
+noter-cache       = { path = "../crates/noter-cache" }
+tokio.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true

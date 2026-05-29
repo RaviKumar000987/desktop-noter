@@ -1,0 +1,150 @@
+/* ═══════════════════════════════════════════════════════════════
+   NOTER PERFORMANCE CSS — src/styles/perf.css
+   CSS containment, content-visibility, and compositing hints.
+
+   Why these matter:
+   - contain: layout style paint → tells the browser that a
+     subtree cannot affect elements outside it, so layout/paint
+     can be scoped and skipped for unchanged sections.
+   - content-visibility: auto → browser can skip rendering of
+     off-screen panels entirely (like hidden Bottom Panel panes).
+   - will-change: transform → promotes elements to their own GPU
+     layer so CSS transitions don't trigger full-page repaints.
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Menubar / Tabbar — completely self-contained ───────────── */
+#menubar {
+  contain: layout style paint;
+}
+#tabbar {
+  contain: layout style paint;
+}
+
+/* ── Statusbar ───────────────────────────────────────────────── */
+#statusbar {
+  contain: layout style paint;
+}
+
+/* ── Activity bar ────────────────────────────────────────────── */
+#activity-bar {
+  contain: layout style;
+}
+
+/* ── Sidebar — layout is contained; style flows in for themes ── */
+#sidebar {
+  contain: layout;
+}
+
+/* ── Explorer tree — each row is fully self-contained ─────────── */
+#explorer-tree {
+  contain: layout style;
+}
+
+/* ── Editor area — the main content region ───────────────────── */
+#editor-area {
+  contain: layout;
+}
+
+/* ── Bottom panel — only the ACTIVE pane needs to be rendered ── */
+#bottom-panel {
+  contain: layout;
+}
+
+/* Inactive panes: skip their rendering until they're shown.
+   content-visibility:auto means the browser measures the element
+   (so layout is correct) but skips paint & compositing. */
+.bp-content:not(.bp-content-active) {
+  content-visibility: auto;
+  /* Provide an intrinsic-size hint so scroll height stays stable
+     even when the pane isn't rendered. */
+  contain-intrinsic-size: 0 200px;
+}
+
+/* ── Bottom panel resize handle — GPU composite animation ──── */
+#bp-resize-handle {
+  will-change: transform;
+}
+
+/* ── Sidebar resize handle ───────────────────────────────────── */
+#resize-handle {
+  will-change: transform;
+}
+
+/* ── Overlays / Modals — composite layer for smooth entry ────── */
+#cp-overlay,
+#settings-overlay,
+#kb-overlay,
+#welcome-overlay,
+#ws-overlay,
+#qo-overlay,
+.ext-qs-overlay,
+#proj-modal-overlay {
+  will-change: opacity;
+}
+
+/* ── Tab list — contain layout so tab changes don't cause
+   full-page reflow ─────────────────────────────────────────── */
+#tabs-list {
+  contain: layout style;
+}
+
+/* ── Toast notifications — GPU layer for fade animation ──────── */
+#toast-container .toast {
+  will-change: opacity;
+}
+
+/* ── Terminal container — isolated painting ──────────────────── */
+#terminal-xterm {
+  contain: strict;
+}
+
+/* ── Search results — only visible rows painted ──────────────── */
+#gs-results {
+  contain: layout style;
+}
+
+/* ── Marketplace overlay — isolated paint region ─────────────── */
+#marketplace-overlay {
+  contain: layout style;
+}
+
+/* ── Phase 11: VirtualExplorer ───────────────────────────────── */
+/* The scroll wrapper fills the explorer-tree container */
+#explorer-tree .vex-scroll {
+  contain: strict;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Rows inside the virtual list are absolutely positioned */
+#explorer-tree .vex-row {
+  box-sizing: border-box;
+  white-space: nowrap;
+  user-select: none;
+  font-size: 13px;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+#explorer-tree .vex-row:hover {
+  background: var(--surface1, rgba(255,255,255,0.06));
+}
+
+#explorer-tree .vex-row.active-file {
+  background: var(--surface2, rgba(255,255,255,0.12));
+}
+
+#explorer-tree .vex-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+/* VirtualExplorer spacer provides total scroll height */
+#explorer-tree .vex-spacer {
+  pointer-events: none;
+}
+#explorer-tree .vex-list {
+  pointer-events: auto;
+}

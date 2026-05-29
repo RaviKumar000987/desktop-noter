@@ -1,0 +1,15 @@
+[package]
+name = "noter-ai-context"
+description = "AI context engine — assembles workspace graph + symbols for AI queries (Phase 9)"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+noter-indexer   = { path = "../noter-indexer" }
+noter-symboldb  = { path = "../noter-symboldb" }
+noter-graph     = { path = "../noter-graph" }
+noter-git       = { path = "../noter-git" }

@@ -1,0 +1,13 @@
+[package]
+name = "noter-graph"
+description = "Dependency, call, and import graph for Find-References and AI context (Phase 8)"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+noter-indexer = { path = "../noter-indexer" }
+petgraph = { version = "0.6", features = ["serde-1"] }

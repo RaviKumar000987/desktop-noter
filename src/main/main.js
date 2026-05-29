@@ -22,33 +22,68 @@ try {
   /* use spawn fallback */
 }
 
+// ─── Rust Native Core (noter-napi) ───────────────────────────────────────────
+const noterNative = require("../native/index");
+if (noterNative.isAvailable()) {
+  console.log("[Main] Rust native core loaded ✓");
+} else {
+  console.warn("[Main] Rust native core unavailable — JS fallbacks active");
+}
+
 // ─── PTY process state ───────────────────────────────────────────────────────
 let ptyProcess = null;
 
 function getShellConfig() {
+  const env = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" };
+
   if (process.platform === "win32") {
-    const psPath = path.join(
-      process.env.SYSTEMROOT || "C:\\Windows",
-      "System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-    );
-    const shell = fs.existsSync(psPath)
-      ? psPath
-      : process.env.COMSPEC || "cmd.exe";
+    // 1. User override via NOTER_SHELL env var
+    if (process.env.NOTER_SHELL && fs.existsSync(process.env.NOTER_SHELL)) {
+      const s = process.env.NOTER_SHELL;
+      const isBash = s.toLowerCase().includes("bash");
+      return { shell: s, args: isBash ? ["--login", "-i"] : [], env };
+    }
+
+    // 2. Git Bash — most common bash on Windows, has proper PTY support
+    const gitBashCandidates = [
+      path.join(process.env["ProgramFiles"] || "C:\\Program Files", "Git", "bin", "bash.exe"),
+      path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Git", "bin", "bash.exe"),
+      path.join(process.env["LOCALAPPDATA"] || "", "Programs", "Git", "bin", "bash.exe"),
+      path.join(process.env["USERPROFILE"] || "C:\\Users\\User", "scoop", "apps", "git", "current", "bin", "bash.exe"),
+    ];
+    for (const candidate of gitBashCandidates) {
+      if (candidate && fs.existsSync(candidate)) {
+        return { shell: candidate, args: ["--login", "-i"], env };
+      }
+    }
+
+    // 3. WSL bash (Windows Subsystem for Linux)
+    const wslBash = path.join(process.env.SYSTEMROOT || "C:\\Windows", "System32", "bash.exe");
+    if (fs.existsSync(wslBash)) {
+      return { shell: wslBash, args: [], env };
+    }
+
+    // 4. PowerShell Core (pwsh) — better than Windows PowerShell
+    const pwshCandidates = [
+      path.join(process.env["ProgramFiles"] || "C:\\Program Files", "PowerShell", "7", "pwsh.exe"),
+      path.join(process.env["ProgramFiles"] || "C:\\Program Files", "PowerShell", "7-preview", "pwsh.exe"),
+    ];
+    for (const candidate of pwshCandidates) {
+      if (fs.existsSync(candidate)) {
+        return { shell: candidate, args: ["-NoLogo", "-NoProfile"], env };
+      }
+    }
+
+    // 5. Windows PowerShell 5 fallback
+    const ps5 = path.join(process.env.SYSTEMROOT || "C:\\Windows", "System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+    const shell = fs.existsSync(ps5) ? ps5 : process.env.COMSPEC || "cmd.exe";
     const isPowerShell = shell.toLowerCase().includes("powershell");
-    return {
-      shell,
-      args: isPowerShell ? ["-NoLogo"] : [],
-      env: { ...process.env, TERM: "xterm-256color" },
-    };
+    return { shell, args: isPowerShell ? ["-NoLogo"] : [], env };
   }
-  const shell =
-    process.env.SHELL ||
-    (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
-  return {
-    shell,
-    args: [],
-    env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" },
-  };
+
+  // macOS / Linux — respect SHELL env, fall back to zsh (macOS) or bash (Linux)
+  const shell = process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
+  return { shell, args: [], env };
 }
 
 // ─── Extension Marketplace helpers ───────────────────────────────────────────
@@ -1095,11 +1130,25 @@ ipcMain.handle("reload-window", () => {
   }
 });
 
-// ─── Global Search ────────────────────────────────────────────────────────────
+// ─── Global Search (Rust-native first, JS fallback) ──────────────────────────
 ipcMain.handle(
   "global-search",
   async (e, { query, rootPath, caseSensitive, useRegex }) => {
     if (!query || !rootPath) return [];
+
+    // Rust path: ~10-30x faster, uses rayon + memmap2, respects .gitignore
+    if (noterNative.isAvailable() && !useRegex) {
+      try {
+        const raw = noterNative.searchWorkspace(rootPath, query, !!caseSensitive);
+        return raw.map((r) => ({
+          file: r.file,
+          line: r.text.slice(0, 300),
+          lineNumber: r.line,
+        })).slice(0, 400);
+      } catch (err) {
+        console.warn("[native-search] error, falling back to JS:", err.message);
+      }
+    }
 
     const TEXT_EXTS = new Set([
       "txt",
@@ -1212,3 +1261,27 @@ ipcMain.handle(
     return results;
   },
 );
+
+// ─── Native: Git Status ───────────────────────────────────────────────────────
+ipcMain.handle("native-git-status", (e, repoPath) => {
+  return noterNative.gitStatus(repoPath);
+});
+
+// ─── Native: Workspace Indexing ──────────────────────────────────────────────
+ipcMain.handle("native-index-workspace", (e, { root, dbPath }) => {
+  return noterNative.indexWorkspace(root, dbPath);
+});
+
+// ─── Native: Symbol Search (Ctrl+P / Go-to-Symbol) ───────────────────────────
+ipcMain.handle("native-search-symbols", (e, { dbPath, query }) => {
+  return noterNative.searchSymbols(dbPath, query);
+});
+
+// ─── Native: Persistent Cache ────────────────────────────────────────────────
+ipcMain.handle("native-cache-set", (e, { dbPath, namespace, key, value }) => {
+  noterNative.cacheSet(dbPath, namespace, key, value);
+});
+
+ipcMain.handle("native-cache-get", (e, { dbPath, namespace, key }) => {
+  return noterNative.cacheGet(dbPath, namespace, key);
+});

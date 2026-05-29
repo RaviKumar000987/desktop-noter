@@ -422,7 +422,22 @@ const ExtensionRuntime = (() => {
     document.head.appendChild(s);
   }
 
-  // ── Main activation ───────────────────────────────────────────
+  // ── Activate a single extension (shared by sync + idle paths) ───
+  function _activateOne(extId, ext) {
+    try {
+      ext.activate(ctx);
+      _active.set(extId, ext);
+      if (Array.isArray(ext.commands) && typeof CommandPalette !== 'undefined' && CommandPalette.registerExtCmd) {
+        ext.commands.forEach(cmd => CommandPalette.registerExtCmd(cmd.id, cmd.label, cmd.run));
+      }
+    } catch (err) {
+      console.warn(`[Ext] Failed to activate ${extId}:`, err);
+    }
+  }
+
+  // ── Main activation — deferred via idle callbacks ─────────────
+  // Each extension's activate() can run JS/DOM work. Spreading them
+  // over idle frames keeps the main thread free for typing & clicks.
   async function activate() {
     injectCSS();
     try {
@@ -434,24 +449,42 @@ const ExtensionRuntime = (() => {
 
     const registry = window._exts || {};
 
+    // Build a queue of [extId, ext] pairs to activate
+    const queue = [];
     for (const [id, meta] of Object.entries(_installed)) {
       if (meta.enabled === false) continue;
       const extId = id.toLowerCase().replace(/\s+/g, '-');
       const ext   = registry[extId];
-      if (!ext) continue;
-      try {
-        ext.activate(ctx);
-        _active.set(extId, ext);
-        // Register commands with CommandPalette if it has a .register()
-        if (Array.isArray(ext.commands) && typeof CommandPalette !== 'undefined' && CommandPalette.registerExtCmd) {
-          ext.commands.forEach(cmd => CommandPalette.registerExtCmd(cmd.id, cmd.label, cmd.run));
-        }
-      } catch (err) {
-        console.warn(`[Ext] Failed to activate ${extId}:`, err);
-      }
+      if (ext) queue.push([extId, ext]);
     }
 
-    document.addEventListener('tab-language-changed', _refreshLangButtons);
+    if (queue.length === 0) {
+      document.addEventListener('tab-language-changed', _refreshLangButtons);
+      return;
+    }
+
+    // Use requestIdleCallback if available, otherwise fall back to
+    // setTimeout(0) so the browser gets at least one render frame
+    // between batches of extension activations.
+    const _idle = window.requestIdleCallback
+      ? (cb) => window.requestIdleCallback(cb, { timeout: 2000 })
+      : (cb) => setTimeout(() => cb({ timeRemaining: () => 50 }), 0);
+
+    function _drainBatch(deadline) {
+      while (queue.length > 0) {
+        // Yield to the browser if idle time is running out
+        if (deadline.timeRemaining() < 4 && queue.length > 1) {
+          _idle(_drainBatch);
+          return;
+        }
+        const [extId, ext] = queue.shift();
+        _activateOne(extId, ext);
+      }
+      // All extensions activated — wire language button refresh
+      document.addEventListener('tab-language-changed', _refreshLangButtons);
+    }
+
+    _idle(_drainBatch);
   }
 
   function _refreshLangButtons() {

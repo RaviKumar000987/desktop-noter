@@ -112,4 +112,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onLspServerStatus:  (cb) => ipcRenderer.on("lsp:server-status", (_e, d) => cb(d)),
   offLspMessage:      ()   => ipcRenderer.removeAllListeners("lsp:message"),
   offLspServerStatus: ()   => ipcRenderer.removeAllListeners("lsp:server-status"),
+
+  // ── Rust Native Core ─────────────────────────────────────────────
+  nativeGitStatus:      (repoPath)             => ipcRenderer.invoke("native-git-status", repoPath),
+  nativeIndexWorkspace: (root, dbPath)         => ipcRenderer.invoke("native-index-workspace", { root, dbPath }),
+  nativeSearchSymbols:  (dbPath, query)        => ipcRenderer.invoke("native-search-symbols", { dbPath, query }),
+  nativeCacheSet:       (dbPath, ns, key, val) => ipcRenderer.invoke("native-cache-set", { dbPath, namespace: ns, key, value: val }),
+  nativeCacheGet:       (dbPath, ns, key)      => ipcRenderer.invoke("native-cache-get", { dbPath, namespace: ns, key }),
 });

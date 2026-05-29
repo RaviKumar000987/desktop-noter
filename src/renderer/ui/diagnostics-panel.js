@@ -269,14 +269,20 @@ window.DiagnosticsPanel = (() => {
     _autoRefresh();
     _updateBadge();
 
-    // Register command
+    // Primary Problems panel is now the BottomPanel's Problems tab.
+    // The floating overlay (this panel) acts as legacy fallback when
+    // BottomPanel is not open.  Command always routes to BottomPanel first.
     window.NoterCommands?.register({
-      id:      'view.problems',
-      title:   'Show Problems',
-      category:'View',
-      description: 'Toggle the diagnostics / problems panel',
-      aliases: ['problems','diagnostics','errors'],
-      handler: toggle,
+      id:          'view.problems',
+      title:       'Show Problems',
+      category:    'View',
+      description: 'Toggle the Problems panel (Ctrl+Shift+M)',
+      aliases:     ['problems', 'diagnostics', 'errors', 'warnings'],
+      handler() {
+        // Prefer BottomPanel Problems tab; fall back to floating overlay
+        if (window.BottomPanel) window.BottomPanel.toggle('problems');
+        else toggle();
+      },
     });
   });
 

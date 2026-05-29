@@ -1,0 +1,13 @@
+[package]
+name = "noter-cache"
+description = "Persistent disk cache for workspace state, indexes, and search results (Phase 13)"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+# Fast key-value store
+sled = "0.34"

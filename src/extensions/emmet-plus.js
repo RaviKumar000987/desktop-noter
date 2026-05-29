@@ -187,45 +187,75 @@
     _until(c){ let s=''; while (!this.end() && this.ch() !== c) s += this.eat(); return s; }
   }
 
+  // ── Lorem Ipsum word bank ───────────────────────────────────────────────────
+  const _LOREM = [
+    'lorem','ipsum','dolor','sit','amet','consectetur','adipiscing','elit',
+    'sed','do','eiusmod','tempor','incididunt','ut','labore','et','dolore','magna',
+    'aliqua','enim','ad','minim','veniam','quis','nostrud','exercitation','ullamco',
+    'laboris','nisi','aliquip','ex','ea','commodo','consequat','duis','aute','irure',
+    'in','reprehenderit','voluptate','velit','esse','cillum','eu','fugiat','nulla',
+    'pariatur','excepteur','sint','occaecat','cupidatat','non','proident','sunt',
+    'culpa','qui','officia','deserunt','mollit','anim','id','est','laborum',
+  ];
+  function _lorem(n) {
+    n = Math.max(1, parseInt(n) || 30);
+    const words = Array.from({ length: n }, (_, i) => _LOREM[i % _LOREM.length]);
+    words[0] = words[0][0].toUpperCase() + words[0].slice(1);
+    return words.join(' ') + '.';
+  }
+
   // ── Generator ───────────────────────────────────────────────────────────────
   class _Gen {
     constructor() { this.n = 0; }
     tab()        { return `\${${++this.n}}`; }
 
-    render(node, ind) {
+    // Replace $ / $$ / $$$ with repeat counter
+    _rc(str, i) {
+      if (!str || !i) return str;
+      return str
+        .replace(/\$\$\$/g, String(i).padStart(3, '0'))
+        .replace(/\$\$/g,   String(i).padStart(2, '0'))
+        .replace(/\$/g,     String(i));
+    }
+
+    render(node, ind, ctr = 0) {
       if (node.t === 'group') {
-        return node.items.map(x => this.render(x, ind)).join('\n' + ind);
+        return node.items.map(x => this.render(x, ind, ctr)).join('\n' + ind);
       }
       if (node.t === 'repeat') {
         const parts = [];
-        for (let i = 0; i < node.m; i++) parts.push(this.render(node.group, ind));
+        for (let i = 1; i <= node.m; i++) parts.push(this.render(node.group, ind, i));
         return parts.join('\n' + ind);
       }
       if (node.t === 'el') {
-        const out = [];
-        for (let i = 0; i < node.m; i++) out.push(this._tag(node, ind));
-        return out.join('\n' + ind);
+        if (node.m > 1) {
+          const out = [];
+          for (let i = 1; i <= node.m; i++) out.push(this._tag(node, ind, i));
+          return out.join('\n' + ind);
+        }
+        return this._tag(node, ind, ctr);
       }
       return '';
     }
 
-    _tag(node, ind) {
+    _tag(node, ind, ctr) {
       const { tag, cls, id, attrs, text, children } = node;
 
       let astr = '';
-      if (id) astr += ` id="${id}"`;
-      if (cls.length) astr += ` class="${cls.join(' ')}"`;
+      if (id)       astr += ` id="${this._rc(id, ctr)}"`;
+      if (cls.length) astr += ` class="${cls.map(c => this._rc(c, ctr)).join(' ')}"`;
       for (const [k, v] of Object.entries(attrs)) {
-        astr += (v === true) ? ` ${k}` : ` ${k}="${v}"`;
+        const val = v === true ? null : this._rc(String(v), ctr);
+        astr += val === null ? ` ${k}` : ` ${k}="${val}"`;
       }
 
       if (VOID_TAGS.has(tag)) return `<${tag}${astr}>`;
 
       let inner;
       if (children) {
-        inner = '\n' + ind + '\t' + this.render(children, ind + '\t') + '\n' + ind;
+        inner = '\n' + ind + '\t' + this.render(children, ind + '\t', ctr) + '\n' + ind;
       } else if (text != null) {
-        inner = text || this.tab();
+        inner = this._rc(text, ctr) || this.tab();
       } else {
         inner = this.tab();
       }
@@ -238,6 +268,11 @@
   function _expandHtml(abbr) {
     if (abbr === '!' || abbr === 'html:5') return HTML5_BOILERPLATE;
 
+    // lorem / lorem30 / lorem5 → lorem ipsum text
+    const loremMatch = abbr.match(/^lorem(\d*)$/i);
+    if (loremMatch) return _lorem(loremMatch[1] || '30');
+
+    // lorem inside a tag: p>lorem5 → handled via parser + generator
     // Only proceed if abbreviation looks like Emmet (has operators or is a known tag)
     const hasOp = /[>.+*#[\]{]/.test(abbr) || /[.]([\w-]+)/.test(abbr) || /:\w/.test(abbr);
     const isTag = HTML_TAGS.has(abbr.toLowerCase());
@@ -246,7 +281,9 @@
     try {
       const ast = new _Parser(abbr).parse();
       const gen = new _Gen();
-      return gen.render(ast, '');
+      const result = gen.render(ast, '');
+      // Replace any {lorem} text content with actual lorem ipsum
+      return result.replace(/\{lorem(\d*)\}/gi, (_, n) => _lorem(n || '30'));
     } catch { return null; }
   }
 
@@ -307,7 +344,8 @@
     const before = line.slice(0, pos.column - 1);
 
     // Extract potential abbreviation (stops at whitespace/delimiters)
-    const match = before.match(/([^\s<>"'`=;,()[\]{}|!@#$%^&\\]+)$/);
+    // Allow ! (boilerplate) and # (id selector) — keep () to avoid matching JS calls
+    const match = before.match(/([^\s<>"'`=;,()[\]{}|@$%^&\\]+)$/);
     if (!match) return false;
 
     const abbr     = match[1];
@@ -420,17 +458,16 @@
 
   // ── Activate / deactivate ───────────────────────────────────────────────────
   function activate() {
-    const ready = () => {
-      if (typeof monaco === 'undefined') return;
+    // ExtensionRuntime calls activate() only after monaco-ready has already fired,
+    // so we must not listen for it again — just run directly.
+    if (typeof monaco !== 'undefined') {
       _registerProviders();
-      // Attach Tab hook once editor exists
-      const attach = () => {
-        if (window.editor) { _hookTab(window.editor); }
-        else setTimeout(attach, 300);
-      };
-      attach();
+    }
+    const attach = () => {
+      if (window.editor) { _hookTab(window.editor); }
+      else setTimeout(attach, 300);
     };
-    document.addEventListener('monaco-ready', ready);
+    attach();
   }
 
   function deactivate() {

@@ -1,0 +1,14 @@
+[package]
+name = "noter-symboldb"
+description = "SQLite-backed symbol database for instant Ctrl+P / Go-to-Definition (Phase 3)"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+rusqlite = { version = "0.31", features = ["bundled"] }
+noter-indexer = { path = "../noter-indexer" }

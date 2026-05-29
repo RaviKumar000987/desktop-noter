@@ -1,0 +1,13 @@
+[package]
+name = "noter-diagnostics"
+description = "Aggregates LSP diagnostics from all language servers into one Problems panel (Phase 7)"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true

@@ -1,0 +1,24 @@
+[package]
+name = "noter-napi"
+description = "NAPI bridge — exposes Rust core to Electron/Node.js"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi.workspace = true
+napi-derive.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+noter-search      = { path = "../crates/noter-search" }
+noter-git         = { path = "../crates/noter-git" }
+noter-indexer     = { path = "../crates/noter-indexer" }
+noter-symboldb    = { path = "../crates/noter-symboldb" }
+noter-watcher     = { path = "../crates/noter-watcher" }
+noter-cache       = { path = "../crates/noter-cache" }
+
+[build-dependencies]
+napi-build = "1"

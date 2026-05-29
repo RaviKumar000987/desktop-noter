@@ -2,11 +2,14 @@
 
 # 🧠 Noter
 
+A free and open-source IDE for students, developers, and learners.
+
+Desktop-Noter is a free, open-source, cross-platform IDE built for students, developers, and lifelong learners. Featuring a modern code editor, file explorer, terminal integration, IntelliSense, and future AI-powered development tools.
+
 ### Modern Intelligent Developer Workspace
 
-A next-generation desktop IDE built with **Electron + Monaco Editor**
-designed for developers who want the power of VS Code,
-the speed of Sublime, and the elegance of modern desktop software.
+A modern open-source IDE focused on speed,
+extensibility, and developer productivity.
 
 <br>
 
@@ -15,7 +18,7 @@ the speed of Sublime, and the elegance of modern desktop software.
 ![JavaScript](https://img.shields.io/badge/JavaScript-ES2025-yellow?style=for-the-badge&logo=javascript)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-black?style=for-the-badge)
 ![Marketplace](https://img.shields.io/badge/Marketplace-Integrated-purple?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+![License](https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge)
 
 <br>
 
@@ -168,18 +171,23 @@ Noter includes a custom-built intelligent coding engine powered by Monaco.
 
 ## ✨ Features
 
-- Cross-file indexing
 - Workspace symbol extraction
 - Context-aware suggestions
 - Smart snippets
 - Hover documentation
 - Tailwind IntelliSense
 - React snippets
-- Python helpers
-- Java/Spring support
 - C/C++ STL support
 
 ---
+
+## 🚧 In Development
+
+- Advanced IntelliSense
+- Language Server Protocol (LSP)
+- AI Assistant
+- Extension SDK
+- Git Integration
 
 ## 🌐 Supported Languages
 
@@ -489,9 +497,7 @@ Future goals include:
 
 # 📜 License
 
-MIT License
-
----
+## GNU General Public License v3.0 (GPL-3.0)
 
 <div align="center">
 

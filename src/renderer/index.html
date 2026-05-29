@@ -14,11 +14,16 @@
     <link rel="stylesheet" href="../styles/features.css" />
     <link rel="stylesheet" href="../styles/marketplace.css" />
     <link rel="stylesheet" href="../styles/phase7.css" />
+    <!-- Performance: CSS containment + content-visibility -->
+    <link rel="stylesheet" href="../styles/perf.css" />
 
-    <!-- xterm.js — MUST load before Monaco so UMD globals are set first -->
+    <!-- xterm.js 5.x — MUST load before Monaco so UMD globals are set first -->
     <link rel="stylesheet" href="../../node_modules/xterm/css/xterm.css" />
     <script src="../../node_modules/xterm/lib/xterm.js"></script>
     <script src="../../node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+    <script src="../../node_modules/xterm-addon-search/lib/xterm-addon-search.js"></script>
+    <script src="../../node_modules/xterm-addon-web-links/lib/xterm-addon-web-links.js"></script>
+    <script src="../../node_modules/xterm-addon-unicode11/lib/xterm-addon-unicode11.js"></script>
   </head>
   <body>
 
@@ -251,27 +256,108 @@
           <div id="editor"></div>
         </div>
 
-        <!-- Terminal panel -->
-        <div id="terminal-panel">
-          <div id="tp-resize" title="Drag to resize"></div>
-          <div id="tp-header">
-            <div class="tp-header-left">
-              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" class="tp-term-icon">
-                <path d="M1.5 2.5h13A.5.5 0 0115 3v10a.5.5 0 01-.5.5H1.5A.5.5 0 011 13V3a.5.5 0 01.5-.5z" stroke="currentColor" stroke-width="1"/>
-                <path d="M3.5 5.5L6 8l-2.5 2.5M7 10.5h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span class="tp-title">TERMINAL</span>
-              <span class="tp-shell-badge" id="tp-shell-name">shell</span>
+        <!-- ════════════════════════════════════════════
+             BOTTOM PANEL — Terminal / Problems / Output / Debug
+             Shortcut: Ctrl+`  (backtick)
+        ════════════════════════════════════════════ -->
+        <div id="bottom-panel">
+
+          <!-- Drag-to-resize handle -->
+          <div id="bp-resize-handle" title="Drag to resize"></div>
+
+          <!-- Tab bar -->
+          <div id="bp-tabbar">
+            <div id="bp-tabs" role="tablist">
+
+              <button class="bp-tab bp-tab-active" data-tab="terminal" role="tab"
+                      aria-selected="true" title="Terminal (Ctrl+`)">
+                <svg viewBox="0 0 16 16" width="11" height="11" fill="none" aria-hidden="true">
+                  <path d="M1.5 2.5h13a.5.5 0 01.5.5v10a.5.5 0 01-.5.5H1.5A.5.5 0 011 13V3a.5.5 0 01.5-.5z"
+                        stroke="currentColor" stroke-width="1"/>
+                  <path d="M3.5 5.5L6 8l-2.5 2.5M7 10.5h4"
+                        stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                TERMINAL
+              </button>
+
+              <button class="bp-tab" data-tab="problems" role="tab"
+                      aria-selected="false" title="Problems (Ctrl+Shift+M)">
+                PROBLEMS
+                <span class="bp-tab-badge" id="bp-problems-count" style="display:none">0</span>
+              </button>
+
+              <button class="bp-tab" data-tab="output" role="tab"
+                      aria-selected="false" title="Output (Ctrl+Shift+U)">
+                OUTPUT
+              </button>
+
+              <button class="bp-tab" data-tab="debug" role="tab"
+                      aria-selected="false" title="Debug Console (Ctrl+Shift+Y)">
+                DEBUG CONSOLE
+              </button>
             </div>
-            <div class="tp-header-right">
-              <button class="sidebar-btn tp-btn" id="terminal-new-btn"   title="New Terminal">+</button>
-              <button class="sidebar-btn tp-btn" id="terminal-clear-btn" title="Clear">⊗</button>
-              <button class="sidebar-btn tp-btn" id="terminal-close-btn" title="Close Terminal (Ctrl+J)">×</button>
+
+            <!-- Right-side context controls -->
+            <div class="bp-tabbar-right">
+              <span id="tp-shell-name" style="display:none">shell</span>
+              <button class="bp-icon-btn" id="terminal-new-btn"
+                      style="display:none" title="New Terminal">+</button>
+              <select class="bp-channel-select" id="bp-output-channel"
+                      style="display:none" title="Select output channel">
+                <option value="noter">Noter</option>
+                <option value="Language Server">Language Server</option>
+                <option value="TypeScript">TypeScript</option>
+              </select>
+              <button class="bp-icon-btn" id="terminal-clear-btn" title="Clear">⊗</button>
+              <button class="bp-icon-btn" id="terminal-close-btn"
+                      title="Close Panel (Ctrl+`)">×</button>
+            </div>
+          </div><!-- /bp-tabbar -->
+
+          <!-- ── TERMINAL CONTENT ── -->
+          <div id="bp-pane-terminal" class="bp-content bp-content-active" role="tabpanel">
+            <div id="terminal-xterm"></div>
+          </div>
+
+          <!-- ── PROBLEMS CONTENT ── -->
+          <div id="bp-pane-problems" class="bp-content" role="tabpanel">
+            <div id="bp-problems-toolbar">
+              <button class="dp-filter-btn dp-filter-active" data-filter="all">All</button>
+              <button class="dp-filter-btn" data-filter="error">
+                <span class="dp-error">✕</span> Errors
+              </button>
+              <button class="dp-filter-btn" data-filter="warning">
+                <span class="dp-warn">⚠</span> Warnings
+              </button>
+              <button class="dp-filter-btn" data-filter="info">
+                <span class="dp-info">ℹ</span> Info
+              </button>
+              <input id="bp-problems-search" class="bp-problems-search"
+                     type="text" placeholder="Filter problems…"
+                     autocomplete="off" spellcheck="false"/>
+            </div>
+            <div id="bp-problems-list"></div>
+            <div id="bp-problems-footer"></div>
+          </div>
+
+          <!-- ── OUTPUT CONTENT ── -->
+          <div id="bp-pane-output" class="bp-content" role="tabpanel">
+            <div id="bp-output-log"></div>
+          </div>
+
+          <!-- ── DEBUG CONSOLE CONTENT ── -->
+          <div id="bp-pane-debug" class="bp-content" role="tabpanel">
+            <div id="bp-debug-log"></div>
+            <div class="bp-debug-input-bar">
+              <span class="bp-debug-prompt-icon" aria-hidden="true">&gt;</span>
+              <input id="bp-debug-input" class="bp-debug-input" type="text"
+                     placeholder="Evaluate expression… (Enter to run, ↑↓ for history)"
+                     autocomplete="off" spellcheck="false"
+                     aria-label="Debug console expression input"/>
             </div>
           </div>
-          <!-- xterm.js mount point -->
-          <div id="terminal-xterm"></div>
-        </div>
+
+        </div><!-- /bottom-panel -->
 
       </div>
       <!-- /editor-area -->
@@ -307,6 +393,16 @@
     <!-- Monaco loader (must come before everything that uses it) -->
     <script src="../../node_modules/monaco-editor/min/vs/loader.js"></script>
 
+    <!-- ── 0. Performance modules — load FIRST so all modules can use them -->
+    <script src="./perf/event-bus.js"></script>
+    <script src="./perf/dom-patcher.js"></script>
+    <script src="./perf/lazy-loader.js"></script>
+    <!-- Phase 11: professional architecture layer -->
+    <script src="./perf/worker-pool.js"></script>
+    <script src="./perf/background-scheduler.js"></script>
+    <script src="./perf/persistent-cache.js"></script>
+    <script src="./perf/memory-manager.js"></script>
+
     <!-- ── 1. Shared constants (src/shared/) ──────────────── -->
     <script src="../shared/constants.js"></script>
 
@@ -330,6 +426,8 @@
     <script src="./core/app.js"></script>
 
     <!-- ── 5. Feature modules ─────────────────────────────── -->
+    <!--    Bottom panel manager — MUST load before terminal.js -->
+    <script src="./ui/bottom-panel.js"></script>
     <!--    Terminal              (src/renderer/terminal/) -->
     <script src="./terminal/terminal.js"></script>
     <!--    Split editor          (src/renderer/editor/) -->
@@ -351,8 +449,25 @@
     <!--    Welcome page          (src/renderer/ui/) -->
     <script src="./ui/welcome.js"></script>
 
-    <!-- ── 6. IntelliSense engine (src/renderer/editor/) ──── -->
+    <!-- ── 6. Language intelligence platform ─────────────── -->
+    <!--    Monaco TS/JS config: compiler opts, inlay hints, type stubs -->
+    <script src="./editor/monaco-ts-config.js"></script>
+    <!--    IntelliSense engine: snippets, workspace indexer, hover docs -->
     <script src="./editor/intellisense.js"></script>
+    <!--    File index DB: IndexedDB symbol store for incremental indexing -->
+    <script src="./editor/file-index-db.js"></script>
+    <!--    LSP client: pyright / clangd / jdtls providers + diagnostics -->
+    <script src="./editor/lsp-client.js"></script>
+    <!--    LSP manager: crash recovery, request queuing, health checks -->
+    <script src="./editor/lsp-manager.js"></script>
+    <!--    Code actions: quick fix (Ctrl+.), organize imports, refactors -->
+    <script src="./editor/code-actions.js"></script>
+    <!--    Diagnostics panel: Problems view with error/warning navigation -->
+    <script src="./ui/diagnostics-panel.js"></script>
+    <!--    Language server status bar + manager panel -->
+    <script src="./ui/lang-status.js"></script>
+    <!--    Virtual explorer: viewport-only file tree renderer -->
+    <script src="./explorer/virtual-explorer.js"></script>
 
     <!-- ── 7. Extensions  (src/extensions/) ──────────────── -->
     <!-- Code quality & formatting -->

@@ -514,9 +514,20 @@ function showTabContextMenu(tab, x, y) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  RENDER TABS
+//  RENDER TABS  — keyed diff via TabPatcher (perf/dom-patcher.js)
+//  TabPatcher.patch() only touches DOM nodes that actually changed
+//  instead of destroying and recreating the entire list.
 // ═══════════════════════════════════════════════════════════════
 function renderTabs() {
+  if (window.TabPatcher) {
+    window.TabPatcher.patch(TabManager.tabs, TabManager.activeId);
+  } else {
+    // Fallback for cases where dom-patcher.js hasn't loaded yet
+    _renderTabsFallback();
+  }
+}
+
+function _renderTabsFallback() {
   const list = document.getElementById("tabs-list");
   if (!list) return;
   list.innerHTML = "";
@@ -550,25 +561,15 @@ function renderTabs() {
     });
     el.appendChild(closeBtn);
 
-    // Left-click → activate
     el.addEventListener("click", () => TabManager.activate(tab.id));
-
-    // Middle-click → close
     el.addEventListener("mousedown", (e) => {
-      if (e.button === 1) {
-        e.preventDefault();
-        TabManager.close(tab.id);
-      }
+      if (e.button === 1) { e.preventDefault(); TabManager.close(tab.id); }
     });
-
-    // Right-click → tab context menu
     el.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       showTabContextMenu(tab, e.clientX, e.clientY);
     });
 
-    // Drag & Drop reordering
     el.draggable = true;
     el.addEventListener("dragstart", TabDnD.onDragStart);
     el.addEventListener("dragover", TabDnD.onDragOver);
@@ -579,10 +580,8 @@ function renderTabs() {
     list.appendChild(el);
   });
 
-  // Scroll active tab into view
   const activeEl = list.querySelector(".tab-item.active");
-  if (activeEl)
-    activeEl.scrollIntoView({ block: "nearest", inline: "nearest" });
+  if (activeEl) activeEl.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -988,6 +987,64 @@ const explorerState = {
   expandedPaths: new Set(),
 };
 
+// ── VirtualExplorer integration (Phase 11) ────────────────────
+// _vexRoots holds the live tree used by VirtualExplorer.
+let _vexRoots = [];
+
+function _entryToVexNode(entry, depth) {
+  return {
+    name:     entry.name,
+    path:     entry.path,
+    type:     entry.type === 'directory' ? 'folder' : 'file',
+    depth,
+    expanded: explorerState.expandedPaths.has(entry.path),
+    children: null,  // lazily populated on expand
+  };
+}
+
+async function _vexLoadChildren(node) {
+  const entries = await window.electronAPI.readDirectory(node.path).catch(() => null);
+  if (!entries) { node.children = []; return; }
+  node.children = entries.map(e => _entryToVexNode(e, node.depth + 1));
+  // Pre-expand folders that were open in a previous session
+  for (const child of node.children) {
+    if (child.type === 'folder' && explorerState.expandedPaths.has(child.path)) {
+      child.expanded = true;
+      await _vexLoadChildren(child);
+    }
+  }
+}
+
+async function _vexToggleFolder(node) {
+  if (node.expanded) {
+    explorerState.expandedPaths.delete(node.path);
+  } else {
+    explorerState.expandedPaths.add(node.path);
+    if (!node.children) await _vexLoadChildren(node);
+  }
+  VirtualExplorer.setTree(_vexRoots);
+  saveSessionState();
+}
+
+async function _vexBuildRoots(folderPath) {
+  const entries = await window.electronAPI.readDirectory(folderPath).catch(() => []);
+  _vexRoots = (entries || []).map(e => _entryToVexNode(e, 0));
+  // Expand previously-open folders (session restore)
+  for (const node of _vexRoots) {
+    if (node.type === 'folder' && explorerState.expandedPaths.has(node.path)) {
+      node.expanded = true;
+      await _vexLoadChildren(node);
+    }
+  }
+  VirtualExplorer.setTree(_vexRoots);
+}
+
+function _vexSetActive(filePath) {
+  if (typeof VirtualExplorer !== 'undefined' && VirtualExplorer.getStats) {
+    VirtualExplorer.setActive(filePath);
+  }
+}
+
 function toggleSidebar(force) {
   sidebarVisible = force !== undefined ? force : !sidebarVisible;
 
@@ -1025,9 +1082,17 @@ async function openExplorerFolder(folderPath) {
   const nameEl = document.getElementById("folder-name");
   if (nameEl) nameEl.textContent = basename(folderPath).toUpperCase();
 
-  const tree = document.getElementById("explorer-tree");
-  tree.innerHTML = "";
-  await loadExplorerChildren(folderPath, tree, 0);
+  // Phase 11 — VirtualExplorer (viewport-only rendering)
+  if (typeof VirtualExplorer !== "undefined" && VirtualExplorer.getStats) {
+    window.ExplorerPathMap?.clear();
+    await _vexBuildRoots(folderPath);
+  } else {
+    // Fallback: legacy DOM explorer
+    const tree = document.getElementById("explorer-tree");
+    tree.innerHTML = "";
+    window.ExplorerPathMap?.clear();
+    await loadExplorerChildren(folderPath, tree, 0);
+  }
 
   // Auto-show sidebar
   if (!sidebarVisible) toggleSidebar(true);
@@ -1043,14 +1108,29 @@ async function openExplorerFolder(folderPath) {
     new CustomEvent("workspace-opened", { detail: { path: folderPath } }),
   );
 
+  // Phase 11 — trigger incremental indexing via WorkerPool
+  Scheduler?.schedule('workspace:index', () => _scheduleWorkspaceIndex(folderPath), Scheduler?.LOW);
+
   saveSessionState();
+}
+
+function _scheduleWorkspaceIndex(folderPath) {
+  if (typeof WorkerPool === "undefined" || typeof FileIndexDB === "undefined") return;
+  // Listing is done by IntelliSense; here we just ensure DB is ready
+  FileIndexDB.init().catch(() => {});
 }
 
 async function refreshExplorer() {
   if (!explorerState.rootPath) return;
-  const tree = document.getElementById("explorer-tree");
-  tree.innerHTML = "";
-  await loadExplorerChildren(explorerState.rootPath, tree, 0);
+  if (typeof VirtualExplorer !== "undefined" && VirtualExplorer.getStats) {
+    window.ExplorerPathMap?.clear();
+    await _vexBuildRoots(explorerState.rootPath);
+  } else {
+    const tree = document.getElementById("explorer-tree");
+    tree.innerHTML = "";
+    window.ExplorerPathMap?.clear();
+    await loadExplorerChildren(explorerState.rootPath, tree, 0);
+  }
 }
 
 // Phase 4 — smart refresh that preserves scroll + active-file highlight
@@ -1251,6 +1331,9 @@ function createExplorerItem(entry, depth) {
       `<span class="explorer-file-icon" style="color:${color}">◦</span>` +
       `<span class="explorer-name" style="color:${color}">${entry.name}</span>`;
 
+    // Register in path map for O(1) active-file highlight
+    window.ExplorerPathMap?.register(entry.path, row);
+
     row.addEventListener("click", () => openFileFromExplorer(entry.path));
 
     // DnD — file can be dragged and dropped onto folders
@@ -1290,10 +1373,21 @@ async function openFileFromExplorer(filePath) {
 }
 
 function updateExplorerActiveFile() {
-  const activePath = TabManager.getActive()?.filePath;
-  document.querySelectorAll(".explorer-row[data-path]").forEach((row) => {
-    row.classList.toggle("active-file", row.dataset.path === activePath);
-  });
+  const activePath = TabManager.getActive()?.filePath || null;
+  // Phase 11: VirtualExplorer setActive (O(1) via _rowMap)
+  if (typeof VirtualExplorer !== "undefined" && VirtualExplorer.getStats) {
+    VirtualExplorer.setActive(activePath || '');
+    return;
+  }
+  if (window.ExplorerPathMap) {
+    // O(1) — direct element lookup via path map (perf/dom-patcher.js)
+    window.ExplorerPathMap.setActive(activePath);
+  } else {
+    // Fallback: linear scan
+    document.querySelectorAll(".explorer-row[data-path]").forEach((row) => {
+      row.classList.toggle("active-file", row.dataset.path === activePath);
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1507,13 +1601,23 @@ async function restoreSessionState() {
       });
     }
 
-    // Restore tabs — suppress auto-blank while restoring
+    // Restore tabs — fetch all files in parallel, then create tabs in order
     TabManager._suppressAutoBlank = true;
     let restoredAny = false;
     if (Array.isArray(s.tabs) && s.tabs.length > 0) {
-      for (const t of s.tabs) {
+      // Fetch all file contents in parallel (IPC calls run concurrently)
+      const filePromises = s.tabs.map((t) =>
+        t.filePath
+          ? window.electronAPI.openFileByPath(t.filePath).catch(() => null)
+          : Promise.resolve(null)
+      );
+      const files = await Promise.all(filePromises);
+
+      for (let i = 0; i < s.tabs.length; i++) {
+        const t = s.tabs[i];
+        const file = files[i];
+
         if (t.filePath) {
-          const file = await window.electronAPI.openFileByPath(t.filePath);
           if (file) {
             const tab = TabManager.create(
               file.filePath,
@@ -1527,7 +1631,6 @@ async function restoreSessionState() {
             window.electronAPI?.watchFile?.(t.filePath);
           }
         } else {
-          // Restore untitled tab with its saved content
           const content = t.untitledContent || "";
           const lang = t.language || "plaintext";
           const tab = TabManager.create(null, content, lang);
@@ -2336,13 +2439,21 @@ async function loadWorkspaceFromFolder(folderPath) {
     if (handle) handle.style.display = "";
   }
 
-  // ── Restore tabs ─────────────────────────────────────────────
+  // ── Restore tabs — fetch all files in parallel ───────────────
   let anyActive = false;
   const tabsToRestore = meta?.tabs || [];
 
-  for (const t of tabsToRestore) {
+  const filePromises2 = tabsToRestore.map((t) =>
+    t.filePath
+      ? window.electronAPI.openFileByPath(t.filePath).catch(() => null)
+      : Promise.resolve(null)
+  );
+  const restoredFiles = await Promise.all(filePromises2);
+
+  for (let i = 0; i < tabsToRestore.length; i++) {
+    const t = tabsToRestore[i];
+    const file = restoredFiles[i];
     if (t.filePath) {
-      const file = await window.electronAPI.openFileByPath(t.filePath);
       if (file) {
         const tab = TabManager.create(
           file.filePath,
@@ -3404,6 +3515,43 @@ declare const global: typeof globalThis & Record<string, any>;
   // ── Start model lifecycle manager ───────────────────────────────
   if (typeof ModelManager !== "undefined") ModelManager.start();
 
+  // ── Phase 11: Professional architecture layer ─────────────────
+  // MemoryManager: resource GC + heap pressure monitoring
+  if (typeof MemoryManager !== "undefined") MemoryManager.start();
+
+  // WorkerPool: named pools so heavy work never blocks the UI thread
+  if (typeof WorkerPool !== "undefined") {
+    WorkerPool.create('indexer', '../workers/indexer.worker.js', 2);
+    WorkerPool.create('search',  '../workers/search.worker.js',  2);
+  }
+
+  // PersistentCache + FileIndexDB: warm up IndexedDB on idle
+  if (typeof PersistentCache !== "undefined") {
+    Scheduler?.schedule('cache:init', () => PersistentCache.init(), Scheduler?.LOW);
+  }
+  if (typeof FileIndexDB !== "undefined") {
+    Scheduler?.schedule('fdb:init', () => FileIndexDB.init(), Scheduler?.LOW);
+  }
+
+  // LspManager: supervises LspClient with crash recovery + retry
+  if (typeof LspManager !== "undefined") {
+    LspManager.init().catch(() => {});
+  } else if (typeof LspClient !== "undefined") {
+    LspClient.init().catch(() => {});
+  }
+
+  // VirtualExplorer: mount into explorer-tree if available
+  if (typeof VirtualExplorer !== "undefined") {
+    const _treeEl = document.getElementById("explorer-tree");
+    if (_treeEl) {
+      VirtualExplorer.mount(_treeEl, {
+        onOpen:    (node) => openFileFromExplorer(node.path),
+        onToggle:  (node) => _vexToggleFolder(node),
+        onContext: () => {/* bubbles to sidebar contextmenu listener */},
+      });
+    }
+  }
+
   // ── Crash recovery check (before session restore) ───────────────
   // Returns latest snapshot if previous exit was abnormal; null otherwise.
   const _crashSnap =
@@ -3465,7 +3613,10 @@ declare const global: typeof globalThis & Record<string, any>;
 
   // ── Mark clean exit on window close ──────────────────────────────
   window.addEventListener("beforeunload", () => {
-    if (typeof CrashRecovery !== "undefined") CrashRecovery.markCleanExit();
+    if (typeof CrashRecovery  !== "undefined") CrashRecovery.markCleanExit();
+    if (typeof MemoryManager  !== "undefined") MemoryManager.disposeAll();
+    if (typeof LspManager     !== "undefined") LspManager.dispose();
+    if (typeof VirtualExplorer !== "undefined") VirtualExplorer.destroy();
   });
 
   // Ctrl+Shift+X → Extension Marketplace

@@ -13,6 +13,7 @@ const IntelliSense = (() => {
   let   _reindexT = null;
 
   // ── Indexer Web Worker (off-thread symbol extraction) ────────────────────
+  // Phase 11: delegate to WorkerPool when available; own worker as fallback.
   let   _worker        = null;
   let   _workerSeq     = 0;
   const _workerPending = new Map(); // id -> resolve
@@ -28,19 +29,34 @@ const IntelliSense = (() => {
         _workerPending.delete(id);
         resolve(results);
       };
-      _worker.onerror = () => { _worker = null; }; // reset so next call retries
+      _worker.onerror = () => { _worker = null; };
     } catch {
       _worker = null;
     }
     return _worker;
   }
 
-  // Send a batch of {path, content, lang} objects to the worker for extraction
+  // Send a batch of {path, content, lang} objects to the worker for extraction.
+  // Uses WorkerPool if available (2 parallel workers); own worker as fallback.
   function _extractViaWorker(batch) {
+    // Phase 11: WorkerPool path
+    if (typeof WorkerPool !== 'undefined' && WorkerPool.stats('indexer')) {
+      return WorkerPool.post('indexer', { files: batch })
+        .then(data => data.results || {})
+        .catch(() => {
+          // Fallback: main-thread extraction
+          const results = {};
+          for (const { path: fp, content, lang } of batch) {
+            if (content) results[fp] = _extractSymbols(content, lang);
+          }
+          return results;
+        });
+    }
+
+    // Own worker fallback
     return new Promise((resolve) => {
       const worker = _getWorker();
       if (!worker) {
-        // Fallback: extract in main thread
         const results = {};
         for (const { path: fp, content, lang } of batch) {
           if (content) results[fp] = _extractSymbols(content, lang);

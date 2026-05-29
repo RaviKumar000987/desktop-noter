@@ -344,6 +344,168 @@ window.LspClient = (() => {
     });
   }
 
+  // ── Code action provider (quick fixes, refactors) ────────────
+  function _registerCodeActionProvider(languageId, serverId) {
+    if (typeof monaco === 'undefined') return;
+    monaco.languages.registerCodeActionProvider(languageId, {
+      async provideCodeActions(model, range, context) {
+        if (_servers[serverId]?.state !== 'running') return { actions: [], dispose() {} };
+        try {
+          const { result } = await window.electronAPI.lspRequest(serverId, 'textDocument/codeAction', {
+            textDocument: { uri: model.uri.toString() },
+            range: {
+              start: { line: range.startLineNumber - 1, character: range.startColumn - 1 },
+              end:   { line: range.endLineNumber - 1,   character: range.endColumn - 1   },
+            },
+            context: {
+              diagnostics: context.markers.map(m => ({
+                range: {
+                  start: { line: m.startLineNumber - 1, character: m.startColumn - 1 },
+                  end:   { line: m.endLineNumber - 1,   character: m.endColumn - 1   },
+                },
+                severity: _monacoSevToLsp(m.severity),
+                message:  m.message,
+                source:   m.source || 'lsp',
+                code:     m.code?.value ?? m.code,
+              })),
+              only: [],
+              triggerKind: 1,
+            },
+          });
+          if (!result) return { actions: [], dispose() {} };
+          const raw     = Array.isArray(result) ? result : (result.items || []);
+          const actions = raw
+            .filter(a => a?.title)
+            .map(a => ({
+              title:       a.title,
+              kind:        a.kind || 'quickfix',
+              diagnostics: context.markers,
+              isPreferred: a.isPreferred || false,
+              edit:        a.edit ? _lspWorkspaceEditToMonaco(a.edit) : undefined,
+              command:     a.command ? {
+                id:        'workbench.action.executeCommand',
+                title:     a.command.title || a.title,
+                arguments: a.command.arguments || [],
+              } : undefined,
+            }));
+          return { actions, dispose() {} };
+        } catch { return { actions: [], dispose() {} }; }
+      },
+    });
+  }
+
+  function _monacoSevToLsp(s) { return s >= 8 ? 1 : s >= 4 ? 2 : s >= 2 ? 3 : 4; }
+
+  function _lspWorkspaceEditToMonaco(lspEdit) {
+    const edits = [];
+    for (const [uri, fileEdits] of Object.entries(lspEdit.changes || {})) {
+      for (const e of fileEdits) {
+        edits.push({
+          resource:  monaco.Uri.parse(uri),
+          versionId: null,
+          textEdit: {
+            range: _lspRangeToMonaco(e.range),
+            text:  e.newText,
+          },
+        });
+      }
+    }
+    if (lspEdit.documentChanges) {
+      for (const change of lspEdit.documentChanges) {
+        if (change.edits) {
+          const uri = change.textDocument?.uri || change.uri;
+          for (const e of change.edits) {
+            edits.push({
+              resource:  monaco.Uri.parse(uri),
+              versionId: null,
+              textEdit:  { range: _lspRangeToMonaco(e.range), text: e.newText },
+            });
+          }
+        }
+      }
+    }
+    return { edits };
+  }
+
+  // ── Inlay hints provider (parameter names, types) ─────────────
+  function _registerInlayHintsProvider(languageId, serverId) {
+    if (typeof monaco === 'undefined') return;
+    // Monaco 0.44+ inlay hints provider
+    if (!monaco.languages.registerInlayHintsProvider) return;
+    monaco.languages.registerInlayHintsProvider(languageId, {
+      async provideInlayHints(model, range) {
+        if (_servers[serverId]?.state !== 'running') return { hints: [], dispose() {} };
+        try {
+          const { result } = await window.electronAPI.lspRequest(serverId, 'textDocument/inlayHint', {
+            textDocument: { uri: model.uri.toString() },
+            range: {
+              start: { line: range.startLineNumber - 1, character: range.startColumn - 1 },
+              end:   { line: range.endLineNumber - 1,   character: range.endColumn - 1   },
+            },
+          });
+          if (!result) return { hints: [], dispose() {} };
+          const hints = (Array.isArray(result) ? result : []).map(h => {
+            const label = Array.isArray(h.label)
+              ? h.label.map(p => (typeof p === 'string' ? p : p.value)).join('')
+              : String(h.label);
+            return {
+              kind:     h.kind === 1
+                ? monaco.languages.InlayHintKind.Type
+                : monaco.languages.InlayHintKind.Parameter,
+              position: { lineNumber: h.position.line + 1, column: h.position.character + 1 },
+              label,
+              paddingLeft:  h.paddingLeft  || false,
+              paddingRight: h.paddingRight || false,
+              tooltip:      h.tooltip
+                ? { value: typeof h.tooltip === 'string' ? h.tooltip : h.tooltip.value }
+                : undefined,
+            };
+          });
+          return { hints, dispose() {} };
+        } catch { return { hints: [], dispose() {} }; }
+      },
+    });
+  }
+
+  // ── Semantic tokens provider (LSP → Monaco) ───────────────────
+  const _SEMANTIC_TOKEN_TYPES = [
+    'namespace','type','class','enum','interface','struct','typeParameter',
+    'parameter','variable','property','enumMember','event','function','method',
+    'macro','keyword','modifier','comment','string','number','regexp','operator',
+    'decorator',
+  ];
+  const _SEMANTIC_TOKEN_MODIFIERS = [
+    'declaration','definition','readonly','static','deprecated','abstract',
+    'async','modification','documentation','defaultLibrary',
+  ];
+
+  function _registerSemanticTokensProvider(languageId, serverId) {
+    if (typeof monaco === 'undefined') return;
+    if (!monaco.languages.registerDocumentSemanticTokensProvider) return;
+    monaco.languages.registerDocumentSemanticTokensProvider(languageId, {
+      getLegend() {
+        return {
+          tokenTypes:     _SEMANTIC_TOKEN_TYPES,
+          tokenModifiers: _SEMANTIC_TOKEN_MODIFIERS,
+        };
+      },
+      async provideDocumentSemanticTokens(model, _lastResultId) {
+        if (_servers[serverId]?.state !== 'running') return null;
+        try {
+          const { result } = await window.electronAPI.lspRequest(serverId, 'textDocument/semanticTokens/full', {
+            textDocument: { uri: model.uri.toString() },
+          });
+          if (!result?.data) return null;
+          return {
+            data:        new Uint32Array(result.data),
+            resultId:    result.resultId,
+          };
+        } catch { return null; }
+      },
+      releaseDocumentSemanticTokens() {},
+    });
+  }
+
   // ── Register all Monaco providers for a language+server ──────
   function _registerProviders(languageId, serverId) {
     _registerCompletionProvider(languageId, serverId);
@@ -352,6 +514,9 @@ window.LspClient = (() => {
     _registerReferencesProvider(languageId, serverId);
     _registerRenameProvider(languageId, serverId);
     _registerSignatureProvider(languageId, serverId);
+    _registerCodeActionProvider(languageId, serverId);
+    _registerInlayHintsProvider(languageId, serverId);
+    _registerSemanticTokensProvider(languageId, serverId);
   }
 
   // ── Helpers ───────────────────────────────────────────────────
@@ -379,16 +544,142 @@ window.LspClient = (() => {
   function _clientCapabilities() {
     return {
       textDocument: {
-        synchronization:   { willSave: false, didSave: false, dynamicRegistration: false },
-        completion:        { completionItem: { snippetSupport: true, documentationFormat: ['markdown','plaintext'], resolveSupport: { properties: ['documentation','detail'] } }, contextSupport: true },
-        hover:             { contentFormat: ['markdown','plaintext'] },
-        signatureHelp:     { signatureInformation: { documentationFormat: ['markdown','plaintext'] } },
-        definition:        { linkSupport: false },
-        references:        {},
-        rename:            { prepareSupport: false },
-        publishDiagnostics:{ relatedInformation: true, tagSupport: { valueSet: [1,2] } },
+        synchronization: {
+          willSave:             false,
+          didSave:              false,
+          dynamicRegistration:  false,
+        },
+        completion: {
+          completionItem: {
+            snippetSupport:       true,
+            commitCharactersSupport: true,
+            documentationFormat:  ['markdown', 'plaintext'],
+            deprecatedSupport:    true,
+            preselectSupport:     true,
+            tagSupport:           { valueSet: [1] },
+            insertReplaceSupport: true,
+            resolveSupport:       { properties: ['documentation', 'detail', 'additionalTextEdits'] },
+            insertTextModeSupport:{ valueSet: [1, 2] },
+            labelDetailsSupport:  true,
+          },
+          contextSupport: true,
+          insertTextMode: 2,
+          completionList: { itemDefaults: ['commitCharacters', 'editRange', 'insertTextFormat', 'insertTextMode'] },
+        },
+        hover: {
+          contentFormat: ['markdown', 'plaintext'],
+          dynamicRegistration: false,
+        },
+        signatureHelp: {
+          signatureInformation: {
+            documentationFormat:     ['markdown', 'plaintext'],
+            parameterInformation:    { labelOffsetSupport: true },
+            activeParameterSupport:  true,
+          },
+          contextSupport: true,
+          dynamicRegistration: false,
+        },
+        declaration:          { linkSupport: false },
+        definition:           { linkSupport: false },
+        typeDefinition:       { linkSupport: false },
+        implementation:       { linkSupport: false },
+        references:           { dynamicRegistration: false },
+        documentHighlight:    { dynamicRegistration: false },
+        documentSymbol:       {
+          symbolKind:          { valueSet: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26] },
+          hierarchicalDocumentSymbolSupport: true,
+          labelSupport:        true,
+        },
+        codeAction: {
+          dynamicRegistration: false,
+          codeActionLiteralSupport: {
+            codeActionKind: {
+              valueSet: [
+                '', 'quickfix', 'refactor', 'refactor.extract', 'refactor.inline',
+                'refactor.rewrite', 'source', 'source.organizeImports',
+                'source.fixAll', 'source.fixAll.ts',
+              ],
+            },
+          },
+          isPreferredSupport:   true,
+          disabledSupport:      true,
+          dataSupport:          true,
+          resolveSupport:       { properties: ['edit'] },
+          honorsChangeAnnotations: false,
+        },
+        codeLens:             { dynamicRegistration: false },
+        formatting:           { dynamicRegistration: false },
+        rangeFormatting:      { dynamicRegistration: false },
+        rename: {
+          dynamicRegistration:  false,
+          prepareSupport:       false,
+          prepareSupportDefaultBehavior: 1,
+          honorsChangeAnnotations: false,
+        },
+        publishDiagnostics: {
+          relatedInformation:   true,
+          tagSupport:           { valueSet: [1, 2] },
+          versionSupport:       false,
+          codeDescriptionSupport: true,
+          dataSupport:          true,
+        },
+        inlayHint: {
+          dynamicRegistration: false,
+          resolveSupport:      { properties: ['tooltip', 'textEdits', 'label.tooltip', 'label.location', 'label.command'] },
+        },
+        semanticTokens: {
+          dynamicRegistration: false,
+          tokenTypes:          [
+            'namespace','type','class','enum','interface','struct','typeParameter',
+            'parameter','variable','property','enumMember','event','function','method',
+            'macro','keyword','modifier','comment','string','number','regexp','operator',
+            'decorator',
+          ],
+          tokenModifiers: [
+            'declaration','definition','readonly','static','deprecated','abstract',
+            'async','modification','documentation','defaultLibrary',
+          ],
+          formats:             ['relative'],
+          requests: {
+            full:  true,
+            range: false,
+          },
+          overlappingTokenSupport:  false,
+          multilineTokenSupport:    false,
+          serverCancelSupport:      false,
+          augmentsSyntaxTokens:     true,
+        },
+        foldingRange:         { dynamicRegistration: false },
+        selectionRange:       { dynamicRegistration: false },
+        callHierarchy:        { dynamicRegistration: false },
+        typeHierarchy:        { dynamicRegistration: false },
+        linkedEditingRange:   { dynamicRegistration: false },
       },
-      workspace: { workspaceFolders: true },
+      workspace: {
+        workspaceFolders:     true,
+        configuration:        true,
+        applyEdit:            true,
+        workspaceEdit: {
+          documentChanges:        true,
+          resourceOperations:     ['create', 'rename', 'delete'],
+          failureHandling:        'textOnlyTransactional',
+          normalizesLineEndings:  true,
+          changeAnnotationSupport: { groupsOnLabel: true },
+        },
+        symbol: {
+          symbolKind: { valueSet: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26] },
+          tagSupport: { valueSet: [1] },
+          resolveSupport: { properties: ['location.range'] },
+        },
+        semanticTokens:       { refreshSupport: false },
+        inlayHint:            { refreshSupport: false },
+        diagnostics:          { refreshSupport: false },
+        codeLens:             { refreshSupport: false },
+      },
+      general: {
+        positionEncodings: ['utf-16'],
+        markdown:          { parser: 'marked', version: '1.1.0' },
+      },
     };
   }
 

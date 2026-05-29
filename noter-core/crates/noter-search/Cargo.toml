@@ -1,0 +1,21 @@
+[package]
+name = "noter-search"
+description = "Rust-powered ripgrep-style search engine (Phase 1)"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rayon.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+# File traversal respecting .gitignore
+ignore = "0.4"
+# Regex engine
+regex = "1"
+# Memory-mapped file reads
+memmap2 = "0.9"
+walkdir = "2"

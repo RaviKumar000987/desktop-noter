@@ -690,79 +690,98 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   TERMINAL PANEL  (xterm.js)
+   BOTTOM PANEL — VS Code-style tabbed panel
+   Tabs: Terminal · Problems · Output · Debug Console
 ═══════════════════════════════════════════════════════════ */
-#terminal-panel {
+#bottom-panel {
   display: none;
   flex-direction: column;
-  height: 260px;
+  height: 280px;
   background: #0d1117;
   border-top: 1px solid var(--gh-border-muted);
   flex-shrink: 0;
   overflow: hidden;
   position: relative;
 }
-#terminal-panel.tp-visible {
-  display: flex;
-}
+#bottom-panel.bp-visible { display: flex; }
 
-/* Drag-to-resize handle */
-#tp-resize {
+/* ── Resize handle ── */
+#bp-resize-handle {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0; left: 0; right: 0;
   height: 4px;
   cursor: row-resize;
-  z-index: 5;
+  z-index: 10;
   background: transparent;
   transition: background 0.14s;
 }
-#tp-resize:hover {
-  background: rgba(88, 166, 255, 0.28);
-}
+#bp-resize-handle:hover { background: rgba(88,166,255,0.28); }
 
-/* Terminal header */
-#tp-header {
+/* ── Tab bar ── */
+#bp-tabbar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 8px 0 12px;
-  height: 34px;
+  align-items: stretch;
+  height: 35px;
   background: #161b22;
   border-bottom: 1px solid var(--gh-border-muted);
   flex-shrink: 0;
-  gap: 8px;
+  gap: 0;
 }
-
-.tp-header-left {
+#bp-tabs {
   display: flex;
-  align-items: center;
-  gap: 7px;
+  align-items: stretch;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
-.tp-header-right {
-  display: flex;
+.bp-tab {
+  display: inline-flex;
   align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.tp-term-icon {
-  color: var(--gh-fg-subtle);
-  flex-shrink: 0;
-}
-
-.tp-title {
+  gap: 5px;
+  padding: 0 14px;
+  height: 100%;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
   color: var(--gh-fg-muted);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.09em;
+  font-weight: 600;
+  letter-spacing: 0.07em;
   white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.11s, border-color 0.11s, background 0.1s;
 }
+.bp-tab:hover {
+  color: var(--gh-fg-default);
+  background: rgba(255,255,255,0.04);
+}
+.bp-tab.bp-tab-active {
+  color: var(--gh-fg-default);
+  border-bottom-color: #58a6ff;
+}
+.bp-tab-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 8px;
+  min-width: 16px;
+  line-height: 14px;
+  text-align: center;
+  background: #da3633;
+  color: #fff;
+}
+.bp-badge-warn { background: #9e6a03; }
 
-.tp-shell-badge {
+/* ── Tab bar right controls ── */
+.bp-tabbar-right {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+#tp-shell-name {
   background: var(--surface0);
   color: var(--gh-fg-subtle);
   font-size: 10.5px;
@@ -770,17 +789,46 @@
   border-radius: 10px;
   border: 1px solid var(--gh-border-muted);
   white-space: nowrap;
+}
+.bp-channel-select {
+  background: var(--surface0);
+  border: 1px solid var(--gh-border-muted);
+  color: var(--gh-fg-default);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  max-width: 150px;
+  outline: none;
+}
+.bp-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--gh-fg-muted);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
   flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
 }
+.bp-icon-btn:hover { background: var(--surface0); color: var(--gh-fg-default); }
 
-.tp-btn {
-  width: 24px !important;
-  height: 24px !important;
-  font-size: 14px !important;
-  border-radius: 5px !important;
+/* ── Tab content panes ── */
+.bp-content {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
 }
+.bp-content.bp-content-active { display: flex; }
 
-/* xterm.js mount container */
+/* ══ TERMINAL PANE ══ */
+#bp-pane-terminal { background: #0d1117; }
 #terminal-xterm {
   flex: 1;
   min-height: 0;
@@ -788,26 +836,209 @@
   padding: 4px 0 0 4px;
   background: #0d1117;
 }
-
-/* Ensure xterm canvas fills its container */
 #terminal-xterm .terminal,
-#terminal-xterm .xterm {
-  height: 100% !important;
+#terminal-xterm .xterm             { height: 100% !important; }
+#terminal-xterm .xterm-viewport    { background: transparent !important; }
+#terminal-xterm .xterm-viewport::-webkit-scrollbar       { width: 5px; }
+#terminal-xterm .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+#terminal-xterm .xterm-viewport::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 4px; }
+
+/* ══ PROBLEMS PANE ══ */
+#bp-pane-problems { background: #0d1117; flex-direction: column; }
+#bp-problems-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 10px;
+  background: #161b22;
+  border-bottom: 1px solid var(--gh-border-muted);
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
-#terminal-xterm .xterm-viewport {
-  background: transparent !important;
-}
-/* Thin scrollbar inside xterm */
-#terminal-xterm .xterm-viewport::-webkit-scrollbar {
-  width: 5px;
-}
-#terminal-xterm .xterm-viewport::-webkit-scrollbar-track {
-  background: transparent;
-}
-#terminal-xterm .xterm-viewport::-webkit-scrollbar-thumb {
-  background: var(--surface1);
+.bp-problems-search {
+  flex: 1;
+  min-width: 120px;
+  background: var(--surface0);
+  border: 1px solid var(--gh-border-muted);
+  color: var(--gh-fg-default);
+  font-size: 12px;
+  padding: 3px 8px;
   border-radius: 4px;
+  outline: none;
+  margin-left: 4px;
 }
+.bp-problems-search:focus { border-color: #58a6ff; }
+#bp-problems-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 2px 0;
+}
+#bp-problems-list::-webkit-scrollbar       { width: 6px; }
+#bp-problems-list::-webkit-scrollbar-track { background: transparent; }
+#bp-problems-list::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 3px; }
+#bp-problems-footer {
+  display: flex;
+  gap: 14px;
+  padding: 4px 14px;
+  font-size: 11px;
+  background: #161b22;
+  border-top: 1px solid var(--gh-border-muted);
+  flex-shrink: 0;
+}
+.bp-diag-empty  { color: var(--gh-fg-muted); font-style: italic; padding: 14px 16px; font-size: 12px; }
+.bp-diag-muted  { color: var(--gh-fg-muted); }
+.bp-diag-group  { border-bottom: 1px solid rgba(255,255,255,0.04); }
+.bp-diag-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 3px;
+  background: rgba(255,255,255,0.02);
+}
+.bp-diag-fname { color: var(--gh-fg-default); font-weight: 600; font-size: 12px; }
+.bp-diag-fpath { color: var(--gh-fg-muted); font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-diag-fcounts { display: flex; gap: 8px; flex-shrink: 0; font-size: 11px; }
+.bp-diag-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 12px 3px 28px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.08s;
+}
+.bp-diag-row:hover { background: rgba(255,255,255,0.04); }
+.bp-diag-icon { flex-shrink: 0; font-size: 11px; width: 14px; text-align: center; }
+.bp-diag-msg  { flex: 1; color: var(--gh-fg-default); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-diag-meta { display: flex; gap: 6px; flex-shrink: 0; color: var(--gh-fg-muted); font-size: 10.5px; }
+.bp-diag-src  { background: var(--surface0); padding: 0 4px; border-radius: 3px; }
+.bp-diag-code { color: var(--gh-fg-subtle); }
+.bp-diag-loc  { color: var(--gh-fg-muted); white-space: nowrap; }
+
+/* ══ OUTPUT PANE ══ */
+#bp-pane-output { background: #0d1117; }
+#bp-output-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 12px;
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  min-height: 0;
+}
+#bp-output-log::-webkit-scrollbar       { width: 6px; }
+#bp-output-log::-webkit-scrollbar-track { background: transparent; }
+#bp-output-log::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 3px; }
+.bp-out-line  { white-space: pre-wrap; word-break: break-all; padding: 0; }
+.bp-out-log   { color: var(--gh-fg-default); }
+.bp-out-info  { color: #58a6ff; }
+.bp-out-warn  { color: #e3b341; }
+.bp-out-error { color: #ff7b72; }
+.bp-out-debug { color: var(--gh-fg-muted); }
+.bp-out-empty { color: var(--gh-fg-muted); font-style: italic; padding: 14px; font-size: 12px; }
+
+/* ══ DEBUG CONSOLE PANE ══ */
+#bp-pane-debug { background: #0d1117; flex-direction: column; }
+#bp-debug-log {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 4px 0;
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+#bp-debug-log::-webkit-scrollbar       { width: 6px; }
+#bp-debug-log::-webkit-scrollbar-track { background: transparent; }
+#bp-debug-log::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 3px; }
+.bp-debug-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 2px 12px;
+  border-left: 2px solid transparent;
+  transition: background 0.07s;
+}
+.bp-debug-entry:hover   { background: rgba(255,255,255,0.03); }
+.bp-debug-input  { border-left-color: #58a6ff; }
+.bp-debug-result { border-left-color: #3fb950; }
+.bp-debug-error  { border-left-color: #ff7b72; background: rgba(255,123,114,0.05); }
+.bp-debug-warn   { border-left-color: #e3b341; background: rgba(227,179,65,0.05); }
+.bp-dbg-prompt   { color: #58a6ff; font-weight: 700; flex-shrink: 0; user-select: none; }
+.bp-dbg-expr     { color: var(--gh-fg-default); }
+.bp-dbg-result   { color: #3fb950; white-space: pre-wrap; word-break: break-all; }
+.bp-dbg-error    { color: #ff7b72; white-space: pre-wrap; }
+.bp-dbg-warn     { color: #e3b341; white-space: pre-wrap; }
+.bp-dbg-log,
+.bp-dbg-debug    { color: var(--gh-fg-muted); white-space: pre-wrap; }
+.bp-dbg-info     { color: #58a6ff; white-space: pre-wrap; }
+.bp-debug-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 34px;
+  background: #161b22;
+  border-top: 1px solid var(--gh-border-muted);
+  flex-shrink: 0;
+}
+.bp-debug-prompt-icon {
+  color: #58a6ff;
+  font-weight: 700;
+  font-family: "Cascadia Code", monospace;
+  font-size: 13px;
+  flex-shrink: 0;
+  user-select: none;
+}
+#bp-debug-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--gh-fg-default);
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 12.5px;
+  caret-color: #58a6ff;
+}
+#bp-debug-input::placeholder { color: var(--gh-fg-muted); }
+
+/* ── Terminal search bar (xterm 5 SearchAddon) ── */
+.term-search-bar {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: #1c2128;
+  border: 1px solid var(--gh-border-muted);
+  border-radius: 6px;
+  padding: 3px 5px;
+  z-index: 20;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.term-search-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--gh-fg-default);
+  font-size: 12px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  width: 180px;
+  caret-color: #58a6ff;
+}
+.term-search-input::placeholder { color: var(--gh-fg-muted); }
+.term-search-btn {
+  background: transparent;
+  border: none;
+  color: var(--gh-fg-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.term-search-btn:hover { background: var(--surface0); color: var(--gh-fg-default); }
 
 /* ═══════════════════════════════════════════════════════════
    SPLIT EDITOR  (right pane)
