@@ -9,5 +9,5 @@ serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
-noter-indexer = { path = "../noter-indexer" }
+noter-core-api = { path = "../noter-core-api" }
 petgraph = { version = "0.6", features = ["serde-1"] }

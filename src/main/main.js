@@ -6,6 +6,10 @@ const { exec, spawn } = require("child_process");
 const os = require("os");
 let mainWindow;
 
+// ── Settings file manager ─────────────────────────────────────────────────────
+const settingsFile = require("./settings-file");
+settingsFile.ensureFile(); // create settings.json if it doesn't exist yet
+
 // ── LSP Bridge (language server manager) ─────────────────────────────────────
 let lspBridge = null;
 try {
@@ -23,11 +27,18 @@ try {
 }
 
 // ─── Rust Native Core (noter-napi) ───────────────────────────────────────────
-const noterNative = require("../native/index");
-if (noterNative.isAvailable()) {
-  console.log("[Main] Rust native core loaded ✓");
-} else {
-  console.warn("[Main] Rust native core unavailable — JS fallbacks active");
+let noterNative = { isAvailable: () => false, searchWorkspace: () => [], gitStatus: () => null,
+  indexWorkspace: () => 0, searchSymbols: () => [], cacheSet: () => {}, cacheGet: () => null };
+try {
+  const _native = require("../native/index");
+  if (_native.isAvailable()) {
+    noterNative = _native;
+    console.log("[Main] Rust native core loaded ✓");
+  } else {
+    console.warn("[Main] Rust native core unavailable — JS fallbacks active");
+  }
+} catch (e) {
+  console.warn("[Main] Rust native core load error:", e.message);
 }
 
 // ─── PTY process state ───────────────────────────────────────────────────────
@@ -131,6 +142,8 @@ function createWindow() {
     minHeight: 480,
     frame: false,
     transparent: true,
+    roundedCorners: true,          // Windows 11 — OS-level rounded corners
+    backgroundColor: "#00000000",  // fully transparent backing
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.js"),
       nodeIntegration: false,
@@ -162,6 +175,8 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  // Register settings.json IPC after window is created (needs mainWindow ref)
+  settingsFile.registerIPC(ipcMain, mainWindow);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

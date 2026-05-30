@@ -12,10 +12,12 @@
      layer so CSS transitions don't trigger full-page repaints.
 ═══════════════════════════════════════════════════════════════ */
 
-/* ── Menubar / Tabbar — completely self-contained ───────────── */
-#menubar {
-  contain: layout style paint;
-}
+/* ── Tabbar ─────────────────────────────────────────────────── */
+/* NOTE: #menubar has NO containment.
+   Any contain value (layout, paint, or style) either clips the
+   dropdown menus or makes #menubar the absolute-positioning
+   containing block, both of which break dropdown positioning.
+   The perf benefit of containing a 34px bar is negligible. */
 #tabbar {
   contain: layout style paint;
 }

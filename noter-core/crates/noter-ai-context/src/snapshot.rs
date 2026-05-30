@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use noter_indexer::Symbol;
+use noter_core_api::Symbol;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextSnapshot {

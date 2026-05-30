@@ -410,21 +410,64 @@ function showFileContextMenu(filePath, x, y, row) {
       },
       {
         icon: "⊢",
-        label: "Reveal in Explorer",
+        label: "Reveal in File Manager",
         action: () => window.electronAPI.shellReveal(filePath),
+      },
+      {
+        icon: "⌨",
+        label: "Open in Terminal",
+        action: () => {
+          if (typeof TerminalPanel !== "undefined") {
+            if (typeof TerminalPanel.setCwd === "function") TerminalPanel.setCwd(dir);
+            TerminalPanel.show();
+          }
+        },
+      },
+      { separator: true },
+      {
+        icon: "⎘",
+        label: "Copy File Name",
+        action: () => {
+          const name = filePath.split(/[\\/]/).pop();
+          navigator.clipboard.writeText(name);
+          showToast("File name copied", "success", 1500);
+        },
+      },
+      { separator: true },
+      {
+        icon: "±",
+        label: "Git: Stage File",
+        action: () => showToast("Git stage — coming in Phase 3 (Git Visual Tooling)", "info", 2500),
+      },
+      {
+        icon: "⊟",
+        label: "Git: View Diff",
+        action: () => showToast("Git diff — coming in Phase 3", "info", 2500),
       },
       ...(isRunnable(filePath) ? [
         { separator: true },
         {
           icon: "▶",
           label: "Run File",
-          shortcut: "Ctrl+Alt+N",
+          shortcut: "F5",
           action: () => {
-            openFileFromExplorer(filePath).then ? openFileFromExplorer(filePath).then(() => {
-              if (typeof ExtensionRuntime !== "undefined") ExtensionRuntime.runCurrentFile();
-            }) : (() => {
-              if (typeof ExtensionRuntime !== "undefined") ExtensionRuntime.runCurrentFile();
-            })();
+            if (typeof runCurrentFile === "function") {
+              openFileFromExplorer(filePath);
+              setTimeout(() => runCurrentFile("auto"), 200);
+            }
+          },
+        },
+        {
+          icon: "▶",
+          label: "Run in Terminal",
+          action: () => {
+            const ext = filePath.split(".").pop().toLowerCase();
+            const map = { js: "node", ts: "npx ts-node", py: "python",
+                         rs: "cargo run", rb: "ruby", go: "go run" };
+            const runner = map[ext] || "node";
+            const cmd = `${runner} "${filePath}"`;
+            if (typeof TerminalPanel !== "undefined") TerminalPanel.show();
+            setTimeout(() => window.electronAPI?.ptyWrite?.(`${cmd}\r`), 300);
           },
         },
       ] : []),
@@ -476,9 +519,39 @@ function showFolderContextMenu(folderPath, x, y, row) {
         },
       },
       {
+        icon: "⎘",
+        label: "Copy Relative Path",
+        action: () => copyPathToClipboard(folderPath, true),
+      },
+      {
         icon: "⊢",
-        label: "Reveal in Explorer",
+        label: "Open in Terminal",
+        action: () => {
+          if (typeof TerminalPanel !== "undefined") {
+            if (typeof TerminalPanel.setCwd === "function") TerminalPanel.setCwd(folderPath);
+            TerminalPanel.show();
+          }
+        },
+      },
+      {
+        icon: "⊢",
+        label: "Reveal in File Manager",
         action: () => window.electronAPI.shellReveal(folderPath),
+      },
+      { separator: true },
+      {
+        icon: "🔍",
+        label: "Find in Folder",
+        action: () => {
+          if (typeof GlobalSearch !== "undefined") GlobalSearch.show();
+          showToast("Search scoped to folder — coming in Phase 1", "info", 2000);
+        },
+      },
+      { separator: true },
+      {
+        icon: "±",
+        label: "Git: Stage Folder",
+        action: () => showToast("Git stage folder — coming in Phase 3", "info", 2500),
       },
       { separator: true },
       { icon: "↻", label: "Refresh", action: () => refreshExplorer() },

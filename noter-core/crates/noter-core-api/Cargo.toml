@@ -1,0 +1,12 @@
+[package]
+name = "noter-core-api"
+description = "Single source of truth for all Noter internal types. Every crate depends on this; nothing else."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+lsp-types.workspace = true
+uuid.workspace = true

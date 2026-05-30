@@ -7,6 +7,7 @@ use noter_indexer::WorkspaceIndexer;
 pub struct JsSymbol {
     pub name: String,
     pub kind: String,
+    /// Workspace-relative path (e.g. "src/main.rs"). Falls back to URI if not inside workspace.
     pub file: String,
     pub line: u32,
     pub column: u32,
@@ -45,9 +46,13 @@ pub fn search_symbols(db_path: String, query: String) -> Result<Vec<JsSymbol>> {
         .map(|s| JsSymbol {
             name: s.name,
             kind: format!("{:?}", s.kind),
-            file: s.file,
-            line: s.line,
-            column: s.column,
+            file: if s.file.workspace_relative.is_empty() {
+                s.file.uri
+            } else {
+                s.file.workspace_relative
+            },
+            line: s.range.start.line,
+            column: s.range.start.character,
             container: s.container,
         })
         .collect())

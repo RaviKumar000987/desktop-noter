@@ -53,17 +53,18 @@ const ActivityBar = (() => {
       const title = sb.querySelector(".sidebar-title");
       if (title) title.textContent = "EXPLORER";
     }
-    // Restore correct sub-panels
-    const noFolder = $("no-folder-msg");
-    const expContent = $("explorer-content");
+    // Hide search panel
     const searchPanel = $("search-panel");
     if (searchPanel) searchPanel.style.display = "none";
-    if (noFolder || expContent) {
-      // Let the normal display logic handle these via CSS (not forced)
-      if (noFolder) noFolder.style.display = "";
-      if (expContent) expContent.style.display = "";
+
+    // Restore explorer panels using app.js state — never blindly clear
+    // inline styles, since openExplorerFolder sets them based on whether
+    // a folder is open.  Clearing them to "" reverts to CSS defaults and
+    // makes the workspace disappear (bug: "folder gone after search click").
+    if (typeof window.restoreExplorerView === "function") {
+      window.restoreExplorerView();
     }
-    // Also update the gs-search-btn active state
+
     $("gs-search-btn")?.classList.remove("gs-active");
   }
 

@@ -49,11 +49,13 @@ window.VirtualExplorer = (() => {
   }
 
   function _release(el) {
-    el.className    = '';
-    el.style.cssText = '';
-    el.innerHTML    = '';
-    el._node        = null;
-    if (_pool.length < POOL_SIZE) _pool.push(el);
+    // Clone without children to strip ALL accumulated event listeners.
+    // This is the critical pool-safety step — without it, a row previously
+    // used for a file would carry its _handleOpen listener when reused for
+    // a folder, causing both toggle AND open to fire on a single click.
+    const fresh = el.cloneNode(false);
+    fresh._node = null;
+    if (_pool.length < POOL_SIZE) _pool.push(fresh);
   }
 
   // ── Row rendering ─────────────────────────────────────────────
@@ -196,8 +198,10 @@ window.VirtualExplorer = (() => {
   }
 
   function _handleToggle(node) {
-    node.expanded = !node.expanded;
-    refresh();
+    // Do NOT toggle node.expanded here — node is a spread copy from _tree,
+    // not the original in _vexRoots.  The onToggle callback (_vexToggleFolder)
+    // is responsible for finding the original node and toggling it correctly,
+    // then calling setTree() which will rebuild _tree with the right state.
     _onToggle?.(node);
   }
 

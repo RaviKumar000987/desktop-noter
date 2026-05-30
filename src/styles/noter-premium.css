@@ -1,0 +1,882 @@
+/* ═══════════════════════════════════════════════════════════════════
+   NOTER PREMIUM UI — noter-premium.css
+   Philosophy: Speed · Workflow · Workspace Intelligence
+   Load LAST — overrides every previous stylesheet
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── Design Tokens ────────────────────────────────────────────── */
+:root {
+  /* Canvas layers */
+  --np-canvas:       #111318;
+  --np-canvas-mid:   #151922;
+  --np-canvas-inset: #0d1015;
+  --np-sidebar-bg:   #0f1318;
+  --np-panel-bg:     #111318;
+
+  /* Borders */
+  --np-border:       #1e2330;
+  --np-border-soft:  #181d28;
+
+  /* Foreground */
+  --np-fg:           #d4d8e0;
+  --np-fg-muted:     #7a8294;
+  --np-fg-subtle:    #4a5068;
+
+  /* Single accent */
+  --np-accent:       #4a8dff;
+  --np-accent-dim:   rgba(74, 141, 255, 0.12);
+  --np-accent-glow:  rgba(74, 141, 255, 0.20);
+
+  /* Semantic */
+  --np-success:      #4caf7d;
+  --np-success-dim:  rgba(76, 175, 125, 0.12);
+  --np-warn:         #d4973a;
+  --np-warn-dim:     rgba(212, 151, 58, 0.12);
+  --np-error:        #e05c5c;
+  --np-error-dim:    rgba(224, 92, 92, 0.12);
+
+  /* Surfaces */
+  --np-surface:      #171c24;
+  --np-surface-hi:   #1d2330;
+  --np-hover:        rgba(255,255,255,0.04);
+  --np-active:       rgba(255,255,255,0.07);
+
+  /* Dimensions */
+  --np-titlebar-h:   34px;
+  --np-tab-h:        34px;
+  --np-statusbar-h:  24px;
+  --np-sidebar-w:    240px;
+  --np-activity-w:   44px;
+
+  /* Animation */
+  --np-dur-fast:     80ms;
+  --np-dur:          120ms;
+  --np-dur-slow:     150ms;
+  --np-ease:         cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* Typography */
+  --np-font-ui:      -apple-system, "Segoe UI", system-ui, sans-serif;
+  --np-font-mono:    "JetBrains Mono", "Cascadia Code", "Fira Code",
+                     Consolas, monospace;
+  --np-font-size:    13px;
+}
+
+/* ── Global Reset ─────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--np-canvas-inset);
+  color: var(--np-fg);
+  font-family: var(--np-font-ui);
+  font-size: var(--np-font-size);
+  overflow: hidden;
+  height: 100vh;
+  border-radius: 10px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbars ───────────────────────────────────────────────── */
+::-webkit-scrollbar              { width: 6px; height: 6px; }
+::-webkit-scrollbar-track        { background: transparent; }
+::-webkit-scrollbar-thumb        { background: #2a3040; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover  { background: #3a4256; }
+::-webkit-scrollbar-corner       { background: transparent; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TITLE BAR  —  34px
+═══════════════════════════════════════════════════════════════ */
+#menubar {
+  height: var(--np-titlebar-h) !important;
+  min-height: var(--np-titlebar-h) !important;
+  background: var(--np-canvas-inset) !important;
+  border-bottom: 1px solid var(--np-border) !important;
+  padding: 0 0 0 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0 !important;
+}
+
+/* N logo — tighter */
+.menu-n-logo {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 5px !important;
+  transition: background var(--np-dur) var(--np-ease) !important;
+  -webkit-app-region: no-drag !important;
+  cursor: pointer !important;
+}
+.menu-n-logo:hover { background: var(--np-accent-dim) !important; }
+.menu-n-logo svg   { width: 22px !important; height: 22px !important; }
+
+/* Menu items — MUST keep no-drag or clicks won't register */
+#menubar .menu-item {
+  font-family: var(--np-font-ui) !important;
+  font-size: 12.5px !important;
+  color: var(--np-fg-muted) !important;
+  padding: 4px 9px !important;
+  border-radius: 4px !important;
+  transition: background var(--np-dur-fast) var(--np-ease),
+              color      var(--np-dur-fast) var(--np-ease) !important;
+  -webkit-app-region: no-drag !important;
+  cursor: pointer !important;
+  position: relative !important;
+}
+#menubar .menu-item:hover {
+  background: var(--np-hover) !important;
+  color: var(--np-fg) !important;
+}
+
+/* File title in drag zone */
+.menu-file-title {
+  font-family: var(--np-font-ui) !important;
+  font-size: 12px !important;
+  color: var(--np-fg-subtle) !important;
+  letter-spacing: 0.01em !important;
+}
+.modified-dot {
+  filter: none !important;
+  color: var(--np-warn) !important;
+  font-size: 8px !important;
+}
+
+/* Window controls */
+.win-controls {
+  -webkit-app-region: no-drag !important;
+}
+.win-btn {
+  width: 40px !important;
+  height: var(--np-titlebar-h) !important;
+  color: var(--np-fg-subtle) !important;
+  transition: background var(--np-dur-fast) var(--np-ease),
+              color      var(--np-dur-fast) var(--np-ease) !important;
+  -webkit-app-region: no-drag !important;
+  cursor: pointer !important;
+}
+.win-btn:hover     { background: var(--np-hover) !important; color: var(--np-fg) !important; }
+.win-close:hover   { background: rgba(224,92,92,0.15) !important; color: var(--np-error) !important; }
+#menubar .win-controls .win-close { border-radius: 0 10px 0 0 !important; }
+
+/* Git branch in title bar area */
+#title-git-branch {
+  font-family: var(--np-font-mono) !important;
+  font-size: 11px !important;
+  color: var(--np-success) !important;
+  opacity: 0.75;
+  letter-spacing: 0.02em;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DROPDOWN MENUS
+═══════════════════════════════════════════════════════════════ */
+.dropdown {
+  background: var(--np-canvas-mid) !important;
+  border: 1px solid var(--np-border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.64),
+              0 1px 0 rgba(255,255,255,0.03) inset !important;
+  padding: 4px !important;
+  animation: npDropIn var(--np-dur) var(--np-ease) !important;
+  pointer-events: all !important;
+  -webkit-app-region: no-drag !important;
+  z-index: 9999 !important;
+}
+@keyframes npDropIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.menu-option {
+  font-family: var(--np-font-ui) !important;
+  font-size: 12.5px !important;
+  color: var(--np-fg-muted) !important;
+  padding: 7px 10px !important;
+  border-radius: 5px !important;
+  transition: background var(--np-dur-fast) var(--np-ease),
+              color      var(--np-dur-fast) var(--np-ease) !important;
+}
+.menu-option:hover { background: var(--np-hover) !important; color: var(--np-fg) !important; }
+.shortcut          { opacity: 0.30 !important; font-size: 10.5px !important; }
+.separator         { background: var(--np-border) !important; margin: 3px 0 !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   ACTIVITY BAR  —  44px wide, monochrome icons
+═══════════════════════════════════════════════════════════════ */
+#activity-bar {
+  width: var(--np-activity-w) !important;
+  min-width: var(--np-activity-w) !important;
+  background: var(--np-canvas-inset) !important;
+  border-right: 1px solid var(--np-border) !important;
+}
+.ab-btn {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 6px !important;
+  color: var(--np-fg-subtle) !important;
+  transition: color      var(--np-dur) var(--np-ease),
+              background var(--np-dur) var(--np-ease) !important;
+  cursor: pointer !important;
+  pointer-events: all !important;
+  -webkit-app-region: no-drag !important;
+}
+.ab-btn:hover { color: var(--np-fg-muted) !important; background: var(--np-hover) !important; }
+.ab-btn.ab-active {
+  color: var(--np-accent) !important;
+  background: var(--np-accent-dim) !important;
+}
+.ab-btn.ab-active::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  background: var(--np-accent);
+  border-radius: 2px;
+}
+.ab-btn { position: relative; }
+
+/* ═══════════════════════════════════════════════════════════════
+   SIDEBAR  —  240px, slightly darker than editor
+═══════════════════════════════════════════════════════════════ */
+#sidebar {
+  width: var(--np-sidebar-w) !important;
+  min-width: var(--np-sidebar-w) !important;
+  background: var(--np-sidebar-bg) !important;
+  border-right: 1px solid var(--np-border) !important;
+}
+#sidebar-title {
+  font-family: var(--np-font-ui) !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--np-fg-subtle) !important;
+  padding: 10px 12px 6px !important;
+}
+
+/* Explorer tree */
+.explorer-item {
+  font-family: var(--np-font-mono) !important;
+  font-size: 12.5px !important;
+  color: var(--np-fg-muted) !important;
+  padding: 3px 8px 3px 0 !important;
+  border-radius: 4px !important;
+  transition: background var(--np-dur-fast) var(--np-ease),
+              color      var(--np-dur-fast) var(--np-ease) !important;
+}
+.explorer-item:hover  { background: var(--np-hover) !important; color: var(--np-fg) !important; }
+.explorer-item.active { background: var(--np-active) !important; color: var(--np-fg) !important; }
+.explorer-item.folder > .item-name { color: var(--np-fg) !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TAB BAR  —  34px, thin accent top border on active
+═══════════════════════════════════════════════════════════════ */
+#tab-bar {
+  height: var(--np-tab-h) !important;
+  min-height: var(--np-tab-h) !important;
+  background: var(--np-canvas-inset) !important;
+  border-bottom: 1px solid var(--np-border) !important;
+}
+.tab {
+  height: var(--np-tab-h) !important;
+  font-family: var(--np-font-ui) !important;
+  font-size: 12.5px !important;
+  color: var(--np-fg-subtle) !important;
+  border-right: 1px solid var(--np-border-soft) !important;
+  border-top: 2px solid transparent !important;
+  background: transparent !important;
+  padding: 0 12px !important;
+  transition: color      var(--np-dur-fast) var(--np-ease),
+              background var(--np-dur-fast) var(--np-ease) !important;
+  position: relative;
+}
+.tab:hover   { color: var(--np-fg-muted) !important; background: var(--np-hover) !important; }
+.tab.active  {
+  color:      var(--np-fg) !important;
+  background: var(--np-canvas-mid) !important;
+  border-top-color: var(--np-accent) !important;
+}
+/* Unsaved dot — small, no glow */
+.tab .unsaved-dot,
+.tab .modified-indicator {
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: var(--np-warn) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  display: inline-block;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+/* Hide text "●" if present, show CSS dot instead */
+.tab .tab-close { opacity: 0 !important; transition: opacity var(--np-dur-fast) !important; }
+.tab:hover .tab-close { opacity: 0.5 !important; }
+.tab.active .tab-close { opacity: 0.5 !important; }
+.tab .tab-close:hover  { opacity: 1 !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   EDITOR AREA  —  primary focus
+═══════════════════════════════════════════════════════════════ */
+#editor-container,
+.editor-pane,
+.monaco-editor,
+.monaco-editor-background,
+.monaco-editor .margin {
+  background: var(--np-canvas-mid) !important;
+}
+.editor-wrapper { background: var(--np-canvas-mid) !important; }
+
+/* Monaco editor font */
+.monaco-editor .view-line span,
+.monaco-editor .lines-content {
+  font-family: var(--np-font-mono) !important;
+}
+
+/* Cursor line — very subtle */
+.monaco-editor .current-line {
+  background: rgba(255,255,255,0.025) !important;
+  border: none !important;
+}
+
+/* Selection */
+.monaco-editor .selected-text {
+  background: rgba(74,141,255,0.18) !important;
+}
+
+/* IntelliSense widgets */
+.monaco-editor .suggest-widget {
+  background: var(--np-canvas-mid) !important;
+  border: 1px solid var(--np-border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.56) !important;
+  backdrop-filter: none !important;
+  animation: npFadeIn var(--np-dur) var(--np-ease) !important;
+}
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row.focused {
+  background: var(--np-surface-hi) !important;
+}
+.monaco-editor .parameter-hints-widget {
+  background: var(--np-canvas-mid) !important;
+  border: 1px solid var(--np-border) !important;
+  border-radius: 7px !important;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.48) !important;
+}
+.monaco-editor .monaco-hover {
+  background: var(--np-canvas-mid) !important;
+  border: 1px solid var(--np-border) !important;
+  border-radius: 7px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.48) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STATUS BAR  —  24px, minimal
+═══════════════════════════════════════════════════════════════ */
+#statusbar {
+  height: var(--np-statusbar-h) !important;
+  min-height: var(--np-statusbar-h) !important;
+  background: var(--np-canvas-inset) !important;
+  border-top: 1px solid var(--np-border) !important;
+  padding: 0 6px !important;
+}
+.status-left span,
+.status-right span {
+  font-family: var(--np-font-ui) !important;
+  font-size: 11px !important;
+  color: var(--np-fg-subtle) !important;
+  padding: 1px 7px !important;
+  border-radius: 3px !important;
+  transition: background var(--np-dur-fast) var(--np-ease),
+              color      var(--np-dur-fast) var(--np-ease) !important;
+}
+.status-left span:hover,
+.status-right span:hover {
+  background: var(--np-hover) !important;
+  color: var(--np-fg-muted) !important;
+}
+#language {
+  color: var(--np-accent) !important;
+  background: var(--np-accent-dim) !important;
+  border: 1px solid rgba(74,141,255,0.16) !important;
+  font-weight: 600 !important;
+  font-size: 10.5px !important;
+}
+#language:hover { background: var(--np-accent-glow) !important; }
+
+#git-branch:not(:empty) {
+  color: var(--np-success) !important;
+  background: var(--np-success-dim) !important;
+  border: 1px solid rgba(76,175,125,0.16) !important;
+  font-family: var(--np-font-mono) !important;
+  font-size: 10.5px !important;
+}
+#git-branch:empty { display: none !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   COMMAND PALETTE  —  720px, centered, soft shadow + blur
+═══════════════════════════════════════════════════════════════ */
+#cp-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 17, 0.65) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  z-index: 9999;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--np-dur) var(--np-ease);
+}
+#cp-overlay.cp-visible {
+  opacity: 1;
+  pointer-events: all;
+}
+#cp-box {
+  width: 720px !important;
+  max-width: calc(100vw - 48px) !important;
+  background: var(--np-canvas-mid) !important;
+  border: 1px solid var(--np-border) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.72),
+              0 1px 0 rgba(255,255,255,0.04) inset !important;
+  overflow: hidden;
+  animation: npScaleIn var(--np-dur) var(--np-ease);
+}
+@keyframes npScaleIn {
+  from { opacity: 0; transform: scale(0.97) translateY(-6px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);    }
+}
+#cp-header {
+  padding: 10px 14px 8px !important;
+  border-bottom: 1px solid var(--np-border) !important;
+  background: var(--np-canvas-inset) !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--np-font-ui) !important;
+  font-size: 11px !important;
+  color: var(--np-fg-subtle) !important;
+}
+#cp-input {
+  width: 100% !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: var(--np-fg) !important;
+  font-family: var(--np-font-ui) !important;
+  font-size: 14px !important;
+  padding: 12px 14px !important;
+  border-bottom: 1px solid var(--np-border) !important;
+  caret-color: var(--np-accent) !important;
+}
+#cp-input::placeholder { color: var(--np-fg-subtle) !important; }
+#cp-cats {
+  padding: 6px 10px 4px !important;
+  border-bottom: 1px solid var(--np-border-soft) !important;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cp-cat-pill {
+  font-family: var(--np-font-ui) !important;
+  font-size: 11px !important;
+  padding: 3px 9px !important;
+  border-radius: 4px !important;
+  color: var(--np-fg-subtle) !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  cursor: pointer;
+  transition: all var(--np-dur-fast) var(--np-ease) !important;
+}
+.cp-cat-pill:hover { background: var(--np-hover) !important; color: var(--np-fg-muted) !important; }
+.cp-cat-pill.cp-cat-active {
+  background: var(--np-accent-dim) !important;
+  border-color: rgba(74,141,255,0.25) !important;
+  color: var(--np-accent) !important;
+}
+#cp-list {
+  max-height: 380px !important;
+  overflow-y: auto;
+  padding: 4px !important;
+}
+.cp-item {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 8px 10px !important;
+  border-radius: 6px !important;
+  cursor: pointer;
+  font-family: var(--np-font-ui) !important;
+  font-size: 13px !important;
+  color: var(--np-fg-muted) !important;
+  transition: background var(--np-dur-fast) var(--np-ease),
+              color      var(--np-dur-fast) var(--np-ease) !important;
+}
+.cp-item:hover, .cp-item.cp-sel {
+  background: var(--np-surface-hi) !important;
+  color: var(--np-fg) !important;
+}
+.cp-item-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.cp-item-cat {
+  font-size: 10.5px !important;
+  color: var(--np-fg-subtle) !important;
+  background: var(--np-surface) !important;
+  padding: 1px 6px !important;
+  border-radius: 3px !important;
+}
+.cp-shortcut {
+  font-family: var(--np-font-mono) !important;
+  font-size: 10.5px !important;
+  color: var(--np-fg-subtle) !important;
+  background: var(--np-surface) !important;
+  border: 1px solid var(--np-border) !important;
+  padding: 1px 5px !important;
+  border-radius: 3px !important;
+}
+.cp-group-label {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--np-fg-subtle) !important;
+  padding: 8px 10px 4px !important;
+}
+.cp-empty {
+  text-align: center !important;
+  color: var(--np-fg-subtle) !important;
+  font-size: 12.5px !important;
+  padding: 24px !important;
+}
+#cp-footer {
+  padding: 7px 14px !important;
+  border-top: 1px solid var(--np-border) !important;
+  background: var(--np-canvas-inset) !important;
+  display: flex;
+  gap: 14px;
+  font-size: 11px !important;
+  color: var(--np-fg-subtle) !important;
+}
+#cp-footer kbd {
+  background: var(--np-surface) !important;
+  border: 1px solid var(--np-border) !important;
+  border-radius: 3px !important;
+  padding: 1px 5px !important;
+  font-size: 10.5px !important;
+  color: var(--np-fg-muted) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOTTOM PANEL  —  terminal, problems, output
+═══════════════════════════════════════════════════════════════ */
+#bottom-panel {
+  background: var(--np-canvas-inset) !important;
+  border-top: 1px solid var(--np-border) !important;
+}
+.panel-tab-bar {
+  background: var(--np-canvas-inset) !important;
+  border-bottom: 1px solid var(--np-border) !important;
+}
+.panel-tab {
+  font-family: var(--np-font-ui) !important;
+  font-size: 12px !important;
+  color: var(--np-fg-subtle) !important;
+  padding: 6px 14px !important;
+  border-bottom: 2px solid transparent !important;
+  transition: color var(--np-dur-fast) var(--np-ease),
+              border-color var(--np-dur-fast) var(--np-ease) !important;
+  cursor: pointer;
+}
+.panel-tab:hover  { color: var(--np-fg-muted) !important; }
+.panel-tab.active {
+  color: var(--np-fg) !important;
+  border-bottom-color: var(--np-accent) !important;
+}
+/* Terminal — clean, fast, readable */
+.xterm .xterm-viewport { background: var(--np-canvas-inset) !important; }
+.xterm-screen          { background: var(--np-canvas-inset) !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   NOTIFICATIONS  —  bottom-right, auto-hide
+═══════════════════════════════════════════════════════════════ */
+#toast-container,
+.toast-container {
+  position: fixed !important;
+  bottom: calc(var(--np-statusbar-h) + 12px) !important;
+  right: 14px !important;
+  left: auto !important;
+  top: auto !important;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 6px;
+  pointer-events: none;
+}
+.toast,
+.notification {
+  min-width: 260px;
+  max-width: 380px;
+  background: var(--np-canvas-mid) !important;
+  border: 1px solid var(--np-border) !important;
+  border-radius: 7px !important;
+  padding: 9px 13px !important;
+  font-family: var(--np-font-ui) !important;
+  font-size: 12.5px !important;
+  color: var(--np-fg-muted) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.48) !important;
+  pointer-events: all;
+  animation: npSlideUp var(--np-dur-slow) var(--np-ease);
+}
+@keyframes npSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.toast.success { border-left: 3px solid var(--np-success) !important; }
+.toast.error   { border-left: 3px solid var(--np-error)   !important; }
+.toast.warning { border-left: 3px solid var(--np-warn)    !important; }
+.toast.info    { border-left: 3px solid var(--np-accent)  !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   GLOBAL SEARCH PANEL
+═══════════════════════════════════════════════════════════════ */
+#gs-input {
+  background: var(--np-canvas-inset) !important;
+  border: 1px solid var(--np-border) !important;
+  border-radius: 6px !important;
+  color: var(--np-fg) !important;
+  font-family: var(--np-font-mono) !important;
+  font-size: 12.5px !important;
+  padding: 6px 10px !important;
+  transition: border-color var(--np-dur) var(--np-ease) !important;
+}
+#gs-input:focus {
+  border-color: var(--np-accent) !important;
+  outline: none !important;
+}
+.gs-file-group    { margin-bottom: 2px; }
+.gs-file-header   {
+  font-family: var(--np-font-ui) !important;
+  font-size: 11.5px !important;
+  color: var(--np-fg-muted) !important;
+  padding: 5px 8px !important;
+  font-weight: 600 !important;
+}
+.gs-match-row {
+  font-family: var(--np-font-mono) !important;
+  font-size: 11.5px !important;
+  color: var(--np-fg-subtle) !important;
+  padding: 3px 8px 3px 20px !important;
+  border-radius: 4px !important;
+  transition: background var(--np-dur-fast) var(--np-ease) !important;
+  cursor: pointer;
+}
+.gs-match-row:hover { background: var(--np-hover) !important; color: var(--np-fg-muted) !important; }
+.gs-mark           { background: rgba(74,141,255,0.22) !important; color: var(--np-accent) !important; border-radius: 2px; }
+.gs-lineno         { color: var(--np-fg-subtle) !important; margin-right: 8px; font-size: 10.5px !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   MARKETPLACE
+═══════════════════════════════════════════════════════════════ */
+.marketplace-card {
+  background: var(--np-surface) !important;
+  border: 1px solid var(--np-border) !important;
+  border-radius: 8px !important;
+  transition: border-color var(--np-dur) var(--np-ease),
+              box-shadow    var(--np-dur) var(--np-ease) !important;
+}
+.marketplace-card:hover {
+  border-color: rgba(74,141,255,0.30) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.32) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CONTEXT MENU  (right-click)
+═══════════════════════════════════════════════════════════════ */
+#context-menu,
+.context-menu {
+  background: var(--np-canvas-mid) !important;
+  border: 1px solid var(--np-border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.64) !important;
+  padding: 4px !important;
+  animation: npDropIn var(--np-dur) var(--np-ease) !important;
+}
+.context-menu-item {
+  font-family: var(--np-font-ui) !important;
+  font-size: 12.5px !important;
+  color: var(--np-fg-muted) !important;
+  padding: 7px 11px !important;
+  border-radius: 5px !important;
+  transition: background var(--np-dur-fast) var(--np-ease),
+              color      var(--np-dur-fast) var(--np-ease) !important;
+}
+.context-menu-item:hover { background: var(--np-hover) !important; color: var(--np-fg) !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   SETTINGS UI
+═══════════════════════════════════════════════════════════════ */
+.settings-panel {
+  background: var(--np-canvas-mid) !important;
+}
+.settings-group-label {
+  font-family: var(--np-font-ui) !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--np-fg-subtle) !important;
+}
+.settings-item-label {
+  font-family: var(--np-font-ui) !important;
+  font-size: 13px !important;
+  color: var(--np-fg-muted) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   WELCOME PAGE
+═══════════════════════════════════════════════════════════════ */
+.welcome-page {
+  background: var(--np-canvas-mid) !important;
+}
+.welcome-title {
+  font-family: var(--np-font-ui) !important;
+  color: var(--np-fg) !important;
+  font-size: 22px !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.01em !important;
+}
+.welcome-subtitle {
+  color: var(--np-fg-subtle) !important;
+  font-size: 13px !important;
+}
+.welcome-action {
+  background: var(--np-accent-dim) !important;
+  border: 1px solid rgba(74,141,255,0.22) !important;
+  color: var(--np-accent) !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  padding: 8px 14px !important;
+  transition: background var(--np-dur) var(--np-ease),
+              border-color var(--np-dur) var(--np-ease) !important;
+}
+.welcome-action:hover {
+  background: rgba(74,141,255,0.18) !important;
+  border-color: rgba(74,141,255,0.35) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PROBLEMS / DIAGNOSTICS PANEL
+═══════════════════════════════════════════════════════════════ */
+.diag-item {
+  font-family: var(--np-font-mono) !important;
+  font-size: 12px !important;
+  padding: 5px 10px !important;
+  border-radius: 4px !important;
+  transition: background var(--np-dur-fast) var(--np-ease) !important;
+}
+.diag-item:hover   { background: var(--np-hover) !important; }
+.diag-item.error   { border-left: 2px solid var(--np-error)   !important; }
+.diag-item.warning { border-left: 2px solid var(--np-warn)    !important; }
+.diag-item.info    { border-left: 2px solid var(--np-accent)  !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATION — only cap on UI chrome, never touch Monaco / xterm
+═══════════════════════════════════════════════════════════════ */
+/* Removed global override — it was breaking Monaco, xterm, dropdowns */
+
+/* ═══════════════════════════════════════════════════════════════
+   BREADCRUMB
+═══════════════════════════════════════════════════════════════ */
+#breadcrumb {
+  background: var(--np-canvas-mid) !important;
+  border-bottom: 1px solid var(--np-border-soft) !important;
+  font-family: var(--np-font-ui) !important;
+  font-size: 12px !important;
+  color: var(--np-fg-subtle) !important;
+  padding: 3px 10px !important;
+}
+.breadcrumb-sep { color: var(--np-fg-subtle); margin: 0 3px; opacity: 0.4; }
+.breadcrumb-item { color: var(--np-fg-subtle) !important; }
+.breadcrumb-item:last-child { color: var(--np-fg-muted) !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   RESIZE HANDLE — invisible until hover
+═══════════════════════════════════════════════════════════════ */
+.resize-handle {
+  background: transparent !important;
+  transition: background var(--np-dur) var(--np-ease) !important;
+}
+.resize-handle:hover { background: var(--np-accent) !important; opacity: 0.35 !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILITY — fade-in animation used by lazy-loaded panels
+═══════════════════════════════════════════════════════════════ */
+@keyframes npFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.np-fade-in { animation: npFadeIn var(--np-dur) var(--np-ease); }
+
+/* ─────────────────────────────────────────────────────────────
+   Remove old neon / glow artifacts from previous theme
+───────────────────────────────────────────────────────────── */
+.modified-dot            { filter: none !important; text-shadow: none !important; }
+.ab-btn            { text-shadow: none !important; filter: none !important; }
+.ab-btn.active svg { filter: none !important; }
+
+/* ─────────────────────────────────────────────────────────────
+   CRITICAL: All interactive elements must be no-drag + clickable
+   The menubar has -webkit-app-region: drag which would otherwise
+   swallow all click events in the title bar area
+───────────────────────────────────────────────────────────── */
+button,
+input,
+select,
+textarea,
+a,
+label,
+[role="button"],
+[onclick],
+.menu-item,
+.menu-option,
+.win-btn,
+.tab,
+.tab-close,
+.explorer-item,
+.ab-btn,
+.panel-tab,
+.context-menu-item,
+.cp-item,
+.cp-cat-pill,
+.gs-match-row,
+.gs-case-btn,
+.gs-regex-btn,
+#gs-search-btn,
+.marketplace-card,
+.settings-item,
+.dropdown,
+.submenu,
+#context-menu,
+.context-menu,
+#cp-overlay {
+  -webkit-app-region: no-drag !important;
+  pointer-events: all !important;
+}
+
+/* Sidebar, editor, terminal, panels — always clickable */
+#sidebar,
+#editor-container,
+#bottom-panel,
+#activity-bar,
+.monaco-editor,
+.xterm {
+  -webkit-app-region: no-drag !important;
+  pointer-events: all !important;
+}

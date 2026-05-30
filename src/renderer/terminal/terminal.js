@@ -149,13 +149,86 @@ window.TerminalPanel = (() => {
       }).observe(container);
     }
 
-    // ── Re-focus xterm on any click inside the terminal pane ─
-    // xterm renders an internal <textarea>; clicking the surrounding
-    // container does NOT transfer focus to it automatically.
-    document.getElementById('bp-pane-terminal')?.addEventListener('mousedown', (e) => {
-      // Don't steal focus from the search bar or toolbar buttons
-      if (e.target.closest('.term-search-bar, #bp-tabs, #bp-toolbar')) return;
-      requestAnimationFrame(() => term?.focus());
+    // ── Re-focus xterm on any click inside the terminal pane ─────
+    // xterm renders into a canvas + hidden textarea.  Clicks on the
+    // surrounding container do NOT transfer focus automatically.
+    // We intercept mousedown and immediately focus before any other
+    // handler (e.g. Monaco's global mousedown) can steal it back.
+    const _termPane = document.getElementById('bp-pane-terminal');
+    _termPane?.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.term-search-bar, .bp-icon-btn, #bp-tabbar, .bp-tab')) return;
+      // Prevent the browser's native focus-move behavior for ALL clicks inside
+      // the terminal pane.  Without this, clicking anywhere in the pane focuses
+      // the nearest focusable ancestor, which triggers Monaco's focus handlers
+      // and steals keyboard input away from xterm.
+      //
+      // xterm renders on a <canvas> and manages its own selection via JavaScript
+      // (mousedown→mousemove→mouseup).  Canvas elements have no native text
+      // selection, so preventDefault does NOT break xterm's selection logic —
+      // xterm's own mousedown handler still fires and handles selection normally.
+      e.preventDefault();
+      term?.focus();
+    });
+
+    // ── Terminal right-click context menu ─────────────────────────
+    _termPane?.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const hasSelection = term?.hasSelection?.() ?? false;
+      const items = [
+        {
+          icon: '⎘', label: 'Copy',
+          disabled: !hasSelection,
+          action: () => {
+            const sel = term?.getSelection?.() ?? '';
+            if (sel) navigator.clipboard.writeText(sel);
+          },
+        },
+        {
+          icon: '⎘', label: 'Paste',
+          action: async () => {
+            const text = await navigator.clipboard.readText().catch(() => '');
+            if (text) window.electronAPI?.ptyWrite?.(text);
+          },
+        },
+        { separator: true },
+        {
+          icon: '☰', label: 'Select All',
+          action: () => term?.selectAll?.(),
+        },
+        {
+          icon: '⊗', label: 'Clear Terminal',
+          action: () => term?.clear?.(),
+        },
+        { separator: true },
+        {
+          icon: '+', label: 'New Terminal Session',
+          action: () => newSession(),
+        },
+        {
+          icon: '🔍', label: 'Search in Terminal',
+          action: () => toggleSearch(),
+        },
+        { separator: true },
+        {
+          icon: '⎘', label: 'Copy Terminal Path',
+          action: async () => {
+            const cwd = await window.electronAPI?.terminalGetCwd?.().catch(() => '') ?? '';
+            if (cwd) { navigator.clipboard.writeText(cwd); }
+          },
+        },
+      ];
+
+      // Use the app-wide ContextMenu if available, otherwise build our own
+      if (typeof ContextMenu !== 'undefined') {
+        ContextMenu.show(items, e.clientX, e.clientY);
+      } else {
+        _showTermContextMenu(items, e.clientX, e.clientY);
+      }
+
+      // Restore terminal focus after menu closes (short delay so menu renders first)
+      setTimeout(() => term?.focus(), 60);
     });
 
     // Wire "New Terminal" button
@@ -275,5 +348,81 @@ window.TerminalPanel = (() => {
     );
   });
 
-  return { init, newSession, fit, focus, fitAndFocus, clear, setCwd };
+  // ── Live settings.json options ────────────────────────────────
+  // SettingsJSON dispatches this event when terminal.* keys change
+  window.addEventListener('noter:terminal-options', (e) => {
+    if (!term) return;
+    const opts = e.detail || {};
+    for (const [key, val] of Object.entries(opts)) {
+      try { term.options[key] = val; } catch {}
+    }
+    fitAddon?.fit();
+  });
+
+  // ── Fallback terminal context menu ───────────────────────────
+  // Used when the global ContextMenu singleton (context-menu.js) is not
+  // available.  Shares the same .ctx-menu CSS class so it looks identical.
+  let _termMenuEl = null;
+
+  function _showTermContextMenu(items, x, y) {
+    _hideTermMenu();
+    _termMenuEl = document.createElement('div');
+    _termMenuEl.className = 'ctx-menu';
+    _termMenuEl.style.cssText = `position:fixed;z-index:10000;left:${x}px;top:${y}px;`;
+
+    for (const item of items) {
+      if (item.separator) {
+        const sep = document.createElement('div');
+        sep.className = 'ctx-sep';
+        _termMenuEl.appendChild(sep);
+        continue;
+      }
+      const row = document.createElement('div');
+      row.className = 'ctx-item' + (item.disabled ? ' ctx-disabled' : '');
+      row.innerHTML = `<span class="ctx-icon">${item.icon || ''}</span><span class="ctx-label">${item.label}</span>`;
+      if (!item.disabled && item.action) {
+        row.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          _hideTermMenu();
+          item.action();
+        });
+      }
+      _termMenuEl.appendChild(row);
+    }
+
+    document.body.appendChild(_termMenuEl);
+
+    // Auto-flip if near right/bottom edge
+    requestAnimationFrame(() => {
+      if (!_termMenuEl) return;
+      const rect = _termMenuEl.getBoundingClientRect();
+      if (rect.right  > window.innerWidth)  _termMenuEl.style.left = (x - rect.width)  + 'px';
+      if (rect.bottom > window.innerHeight) _termMenuEl.style.top  = (y - rect.height) + 'px';
+    });
+
+    const _close = (e) => {
+      if (_termMenuEl && !_termMenuEl.contains(e.target)) _hideTermMenu();
+    };
+    document.addEventListener('mousedown', _close, { once: true });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _hideTermMenu(); }, { once: true });
+  }
+
+  function _hideTermMenu() {
+    _termMenuEl?.remove();
+    _termMenuEl = null;
+  }
+
+  function show() {
+    const pane = document.getElementById('bp-pane-terminal');
+    if (pane) pane.style.display = '';
+    if (!initialized) init();
+    fitAndFocus();
+  }
+
+  function hide() {
+    const pane = document.getElementById('bp-pane-terminal');
+    if (pane) pane.style.display = 'none';
+  }
+
+  return { init, show, hide, newSession, fit, focus, fitAndFocus, clear, setCwd, toggleSearch };
 })();

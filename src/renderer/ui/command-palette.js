@@ -217,7 +217,15 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'workbench.devtools', title: 'Open DevTools',          category: 'Developer',
       handler: () => window.electronAPI?.openDevTools?.() },
     { id: 'workbench.rebuildIndex', title: 'Rebuild Workspace Index', category: 'Developer',
-      handler: () => window.IntelliSenseEngine?.rebuildIndex?.() },
+      handler: async () => {
+        window.IntelliSenseEngine?.rebuildIndex?.();
+        const root = window.explorerState?.rootPath;
+        if (root && window.electronAPI?.nativeIndexWorkspace && window._noterSymbolDb) {
+          typeof toast === 'function' && toast('Rebuilding symbol index…', 'info');
+          const count = await window.electronAPI.nativeIndexWorkspace(root, window._noterSymbolDb);
+          typeof toast === 'function' && toast(`Symbol index rebuilt — ${count} symbols`, 'success');
+        }
+      } },
     { id: 'workbench.clearCache', title: 'Clear Cache',          category: 'Developer',
       handler: () => {
         if (!confirm('Clear all cached data (settings and history will be preserved)?')) return;
@@ -273,7 +281,7 @@ const CommandPalette = (() => {
           <span>⌘ Command Palette</span>
           <kbd>Esc to close</kbd>
         </div>
-        <input id="cp-input" type="text" placeholder="Type a command or search…"
+        <input id="cp-input" type="text" placeholder="Type a command… or # for workspace symbols"
                autocomplete="off" spellcheck="false"/>
         <div id="cp-cats"></div>
         <div id="cp-list"></div>
@@ -310,13 +318,94 @@ const CommandPalette = (() => {
   }
 
   // ── Filter & render list ──────────────────────────────────────
+  let _symbolMode = false;
+
   function _filter() {
     const q = document.getElementById('cp-input')?.value || '';
+
+    // # prefix = Rust workspace symbol search
+    if (q.startsWith('#')) {
+      _symbolMode = true;
+      _renderSymbolSearch(q.slice(1).trim());
+      return;
+    }
+    _symbolMode = false;
+
     let results = NoterCommands.search(q);
     if (_activeCategory) results = results.filter(c => c.category === _activeCategory);
     _results = results;
     _selIdx  = 0;
     _renderList();
+  }
+
+  async function _renderSymbolSearch(query) {
+    const list = document.getElementById('cp-list');
+    if (!list) return;
+
+    const db = window._noterSymbolDb;
+    if (!db || !window.electronAPI?.nativeSearchSymbols) {
+      list.innerHTML = `<div class="cp-empty">No symbol index — open a workspace first (index builds in ~2s)</div>`;
+      return;
+    }
+    if (!query) {
+      list.innerHTML = `<div class="cp-empty">Type a symbol name to search across workspace…</div>`;
+      return;
+    }
+
+    list.innerHTML = `<div class="cp-empty">Searching symbols…</div>`;
+    try {
+      const symbols = await window.electronAPI.nativeSearchSymbols(db, query);
+      _results = symbols.map(s => ({
+        id:       `__sym__${s.file}:${s.line}`,
+        title:    s.name,
+        category: s.kind,
+        _sym:     s,
+      }));
+      _selIdx = 0;
+
+      if (!_results.length) {
+        list.innerHTML = `<div class="cp-empty">No symbols match "${query}"</div>`;
+        return;
+      }
+
+      list.innerHTML = _results.map((r, i) => `
+        <div class="cp-item ${i === _selIdx ? 'cp-sel' : ''}" data-i="${i}">
+          <span class="cp-label">${r.title}</span>
+          <span class="cp-item-right">
+            <span class="cp-item-cat">${r.category}</span>
+            <span style="opacity:.5;font-size:.75em">${r._sym.file.split(/[\\/]/).pop()}:${r._sym.line}</span>
+          </span>
+        </div>`).join('');
+
+      list.querySelectorAll('.cp-item').forEach(el => {
+        el.addEventListener('mousedown', e => { e.preventDefault(); _runSymbol(+el.dataset.i); });
+        el.addEventListener('mouseover', () => { _selIdx = +el.dataset.i; });
+      });
+      list.querySelector('.cp-sel')?.scrollIntoView({ block: 'nearest' });
+    } catch (err) {
+      list.innerHTML = `<div class="cp-empty">Symbol search error: ${err.message}</div>`;
+    }
+  }
+
+  function _runSymbol(i) {
+    const item = _results[i];
+    if (!item?._sym) return;
+    hide();
+    const { file, line } = item._sym;
+    setTimeout(async () => {
+      let tab = window.TabManager?.tabs?.find(t => t.filePath === file);
+      if (!tab) {
+        const f = await window.electronAPI?.openFileByPath(file);
+        if (!f) return;
+        tab = window.TabManager?.create(f.filePath, f.content, f.filePath?.split('.').pop());
+      }
+      window.TabManager?.activate?.(tab.id);
+      setTimeout(() => {
+        window.editor?.revealLineInCenter(line);
+        window.editor?.setPosition({ lineNumber: line, column: 1 });
+        window.editor?.focus();
+      }, 60);
+    }, 30);
   }
 
   function _renderList() {
@@ -384,7 +473,7 @@ const CommandPalette = (() => {
     if (e.key === 'Escape')    { hide(); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); _selIdx = Math.min(_selIdx + 1, _results.length - 1); _renderList(); }
     if (e.key === 'ArrowUp')   { e.preventDefault(); _selIdx = Math.max(_selIdx - 1, 0); _renderList(); }
-    if (e.key === 'Enter')     { e.preventDefault(); _run(_selIdx); }
+    if (e.key === 'Enter')     { e.preventDefault(); _symbolMode ? _runSymbol(_selIdx) : _run(_selIdx); }
     if (e.key === 'Tab')       { e.preventDefault(); _selIdx = Math.min(_selIdx + 1, _results.length - 1); _renderList(); }
   }
 

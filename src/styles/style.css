@@ -391,6 +391,8 @@ body {
   transition: background 0.12s, color 0.12s;
   margin: 0 4px;
   flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  pointer-events: all;
 }
 .ab-btn:hover { background: rgba(88,166,255,0.10); color: var(--gh-fg-muted); }
 .ab-btn.ab-active {
@@ -675,6 +677,16 @@ body {
   border: 1px solid rgba(88,166,255,0.18);
 }
 #language:hover { background: rgba(88,166,255,0.18) !important; }
+
+#git-branch:not(:empty) {
+  color: #a6e3a1 !important;
+  background: rgba(166,227,161,0.10);
+  border: 1px solid rgba(166,227,161,0.20);
+  font-size: 11px !important;
+  letter-spacing: 0.02em;
+  cursor: default;
+}
+#git-branch:empty { display: none; }
 
 #wrapStatus {
   color: var(--gh-success) !important;

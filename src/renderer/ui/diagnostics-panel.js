@@ -251,17 +251,28 @@ window.DiagnosticsPanel = (() => {
     _visible ? hide() : show();
   }
 
-  // ── Auto-update when Monaco markers change ────────────────────
+  // ── Auto-update when diagnostics change ──────────────────────
   function _autoRefresh() {
-    if (typeof monaco === 'undefined') return;
-    monaco.editor.onDidChangeMarkers(() => {
-      if (_visible) render();
-      else _updateBadge();
-    });
-    document.addEventListener('lsp:diagnostics-updated', () => {
-      if (_visible) render();
-      else _updateBadge();
-    });
+    // Primary: subscribe to DiagnosticStore — single source of truth
+    // Fires for every publishDiagnostics from any LSP server
+    if (window.DiagnosticStore) {
+      window.DiagnosticStore.onUpdate(() => {
+        const { errors, warnings, infos } = window.DiagnosticStore.counts();
+        if (_visible) render();
+        else _updateBadge(errors, warnings, infos);
+      });
+    }
+
+    // Fallback: Monaco marker changes (Monaco built-in diagnostics, error lens, etc.)
+    if (typeof monaco !== 'undefined') {
+      monaco.editor.onDidChangeMarkers(() => {
+        // Only use Monaco markers if DiagnosticStore has no data (avoids double refresh)
+        if (!window.DiagnosticStore || window.DiagnosticStore.getAll().length === 0) {
+          if (_visible) render();
+          else _updateBadge();
+        }
+      });
+    }
   }
 
   // ── Init ──────────────────────────────────────────────────────

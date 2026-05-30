@@ -4,7 +4,7 @@ use rayon::prelude::*;
 use walkdir::WalkDir;
 use tracing::{info, debug};
 
-use crate::symbol::Symbol;
+use noter_core_api::{Symbol, FileRef};
 use crate::languages::get_language;
 
 pub struct WorkspaceIndexer;
@@ -32,28 +32,32 @@ impl WorkspaceIndexer {
 
         let symbols: Vec<Symbol> = files
             .par_iter()
-            .flat_map(|entry| self.index_file(entry.path()).unwrap_or_default())
+            .flat_map(|entry| self.index_file(entry.path(), root).unwrap_or_default())
             .collect();
 
         debug!("Found {} symbols", symbols.len());
         Ok(symbols)
     }
 
-    fn index_file(&self, path: &Path) -> Result<Vec<Symbol>> {
+    fn index_file(&self, path: &Path, workspace_root: &str) -> Result<Vec<Symbol>> {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        let _lang = match get_language(ext) {
+        let lang = match get_language(ext) {
             Some(l) => l,
             None => return Ok(vec![]),
         };
 
         let source = std::fs::read_to_string(path)?;
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&_lang)?;
+        parser.set_language(&lang)?;
 
         let _tree = parser.parse(&source, None);
+        let _file = FileRef::from_path(path.to_str().unwrap_or(""), workspace_root);
 
-        // TODO: walk tree nodes and extract symbols
-        // placeholder until query strings are added per language
+        // TODO: walk tree nodes and extract symbols — placeholder until query strings added per language
         Ok(vec![])
     }
+}
+
+impl Default for WorkspaceIndexer {
+    fn default() -> Self { Self::new() }
 }

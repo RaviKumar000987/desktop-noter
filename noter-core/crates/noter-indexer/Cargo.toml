@@ -20,4 +20,5 @@ tree-sitter-python = "0.21"
 tree-sitter-rust = "0.21"
 tree-sitter-html = "0.20"
 tree-sitter-css = "0.21"
-noter-cache = { path = "../noter-cache" }
+noter-cache      = { path = "../noter-cache" }
+noter-core-api   = { path = "../noter-core-api" }

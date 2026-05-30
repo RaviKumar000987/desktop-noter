@@ -11,16 +11,62 @@
 window.LspClient = (() => {
 
   // ── Server state ──────────────────────────────────────────────
-  const _servers   = {};   // serverId → { state, capabilities }
-  const _openDocs  = new Map(); // uri → { version, languageId }
-  const _diagStore = new Map(); // uri → MarkerData[]
+  const _servers  = {};              // serverId → { state, capabilities }
+  const _openDocs = new Map();       // uri → { version, languageId }
+  // Diagnostics delegated to DiagnosticStore (loaded before lsp-client.js in index.html)
+
+  // ── Latency metrics ───────────────────────────────────────────
+  // Keeps last 200 samples per LSP method for the diagnostics panel.
+  const _latency  = new Map(); // method → Float32Array ring buffer
+  const _latIdx   = new Map(); // method → current write index
+  const LAT_SIZE  = 200;
+
+  function _recordLatency(method, ms) {
+    if (!_latency.has(method)) {
+      _latency.set(method, new Float32Array(LAT_SIZE));
+      _latIdx.set(method, 0);
+    }
+    const buf = _latency.get(method);
+    const idx = _latIdx.get(method);
+    buf[idx] = ms;
+    _latIdx.set(method, (idx + 1) % LAT_SIZE);
+    // Emit to any listening panel
+    window.NoterBus?.emit('lsp:latency', { method, ms });
+  }
+
+  function _timed(method, promiseFn) {
+    const t0 = performance.now();
+    return promiseFn().finally(() => {
+      _recordLatency(method, Math.round(performance.now() - t0));
+    });
+  }
+
+  function getLatencyStats() {
+    const out = {};
+    for (const [method, buf] of _latency) {
+      const filled = buf.filter(v => v > 0);
+      if (!filled.length) continue;
+      const avg  = filled.reduce((a, b) => a + b, 0) / filled.length;
+      const max  = Math.max(...filled);
+      const min  = Math.min(...filled);
+      const last = buf[(_latIdx.get(method) - 1 + LAT_SIZE) % LAT_SIZE];
+      out[method] = { avg: Math.round(avg), min: Math.round(min), max: Math.round(max), last: Math.round(last), samples: filled.length };
+    }
+    return out;
+  }
 
   // Language → server mapping
   const LANG_SERVER = {
-    python:   'pyright',
-    c:        'clangd',
-    cpp:      'clangd',
-    java:     'jdtls',
+    // TypeScript + JavaScript — both served by typescript-language-server (wraps tsserver)
+    typescript:      'typescript',
+    javascript:      'typescript',
+    typescriptreact: 'typescript',
+    javascriptreact: 'typescript',
+    // Other languages
+    python: 'pyright',
+    c:      'clangd',
+    cpp:    'clangd',
+    java:   'jdtls',
   };
 
   // ── Lifecycle: start all available servers ────────────────────
@@ -35,7 +81,11 @@ window.LspClient = (() => {
     // Listen for server-to-renderer notifications
     window.electronAPI.onLspMessage(_onServerMessage);
     window.electronAPI.onLspServerStatus((status) => {
-      if (_servers[status.id]) _servers[status.id].state = status.state;
+      const { id, state } = status;
+      if (_servers[id]) _servers[id].state = state;
+      if (id === 'typescript' && (state === 'stopped' || state === 'error')) {
+        _restoreMonacoSemantics();
+      }
       _notifyStatusChange();
     });
   }
@@ -49,7 +99,7 @@ window.LspClient = (() => {
       return;
     }
 
-    _servers[serverId] = { state: 'starting', capabilities: {} };
+    _servers[serverId] = { state: 'starting', capabilities: _defaultCapabilities(serverId) };
 
     // LSP Initialize handshake
     const rootUri = _getWorkspaceUri();
@@ -61,11 +111,16 @@ window.LspClient = (() => {
         rootUri,
         workspaceFolders: rootUri ? [{ uri: rootUri, name: 'workspace' }] : null,
         capabilities: _clientCapabilities(),
-        initializationOptions: serverId === 'pyright' ? { pythonPath: null } : undefined,
+        initializationOptions: _initOptions(serverId),
       });
 
       await window.electronAPI.lspNotify(serverId, 'initialized', {});
-      _servers[serverId] = { state: 'running', capabilities: caps?.capabilities || {} };
+      _servers[serverId] = {
+        state: 'running',
+        capabilities: _deriveCapabilities(caps?.capabilities || {}),
+      };
+      // TypeScript server owns semantic features — Monaco web worker steps back
+      if (serverId === 'typescript') _disableMonacoSemantics();
       _notifyStatusChange();
 
       // Re-open any already-open documents
@@ -130,91 +185,66 @@ window.LspClient = (() => {
   }
 
   function _handleDiagnostics({ uri, diagnostics }) {
-    if (typeof monaco === 'undefined') return;
-    const model = monaco.editor.getModels().find(m => m.uri.toString() === uri);
-    if (!model) { _diagStore.set(uri, diagnostics); return; }
-
-    const markers = diagnostics.map(d => ({
-      severity:        _lspSeverity(d.severity),
-      startLineNumber: d.range.start.line + 1,
-      startColumn:     d.range.start.character + 1,
-      endLineNumber:   d.range.end.line + 1,
-      endColumn:       d.range.end.character + 1,
-      message:         d.message,
-      source:          d.source || 'lsp',
-      code:            d.code?.toString(),
-    }));
-
-    monaco.editor.setModelMarkers(model, 'lsp', markers);
-    _diagStore.set(uri, diagnostics);
-    document.dispatchEvent(new CustomEvent('lsp:diagnostics-updated', { detail: { uri, markers } }));
-  }
-
-  function _lspSeverity(s) {
-    // 1=Error, 2=Warning, 3=Information, 4=Hint
-    const MAP = { 1: 8, 2: 4, 3: 2, 4: 1 }; // monaco MarkerSeverity
-    return MAP[s] || 4;
+    // DiagnosticStore handles Monaco marker application + subscriber notification
+    window.DiagnosticStore?.set(uri, diagnostics);
   }
 
   // ── Monaco completion provider for LSP ───────────────────────
+  // Pipeline: LSP items → CompletionNormalizer.fromLsp → rankItems → toMonaco
+  // resolveCompletionItem fetches full docs on demand (Milestone 2).
   function _registerCompletionProvider(languageId, serverId) {
     if (typeof monaco === 'undefined') return;
-    monaco.languages.registerCompletionItemProvider(languageId, {
-      triggerCharacters: ['.', '(', ',', ' ', '<', '"', "'", '/', '@', '#', ':'],
-      async provideCompletionItems(model, position, context) {
-        if (_servers[serverId]?.state !== 'running') return { suggestions: [] };
-        const uri = model.uri.toString();
-        try {
-          const { result, error } = await window.electronAPI.lspRequest(serverId, 'textDocument/completion', {
-            textDocument: { uri },
-            position:     { line: position.lineNumber - 1, character: position.column - 1 },
-            context:      { triggerKind: context.triggerKind, triggerCharacter: context.triggerCharacter },
-          });
-          if (error || !result) return { suggestions: [] };
+    const N = window.CompletionNormalizer;
 
-          const items = Array.isArray(result) ? result : (result.items || []);
-          const word  = model.getWordUntilPosition(position);
-          const range = {
-            startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
-            startColumn: word.startColumn, endColumn: word.endColumn,
-          };
-          return {
-            suggestions: items.map(item => _lspCompletionToMonaco(item, range)),
-            incomplete: result.isIncomplete || false,
-          };
-        } catch { return { suggestions: [] }; }
+    monaco.languages.registerCompletionItemProvider(languageId, {
+      triggerCharacters: ['.', '(', ',', '<', '"', "'", '/', '@', '#', ':'],
+
+      async provideCompletionItems(model, position, context) {
+        if (!_caps(serverId).completion || _servers[serverId]?.state !== 'running') {
+          return { suggestions: [] };
+        }
+        const uri    = model.uri.toString();
+        const word   = model.getWordUntilPosition(position);
+        const prefix = word.word;
+        const range  = {
+          startLineNumber: position.lineNumber, endLineNumber: position.lineNumber,
+          startColumn: word.startColumn,        endColumn: word.endColumn,
+        };
+
+        return _timed('completion', async () => {
+          try {
+            const { result, error } = await window.electronAPI.lspRequest(
+              serverId, 'textDocument/completion', {
+                textDocument: { uri },
+                position:     { line: position.lineNumber - 1, character: position.column - 1 },
+                context:      { triggerKind: context.triggerKind, triggerCharacter: context.triggerCharacter },
+              }
+            );
+            if (error || !result) return { suggestions: [] };
+
+            const lspItems    = Array.isArray(result) ? result : (result.items ?? []);
+            const noterItems  = lspItems.map(i => N.fromLsp(i, serverId));
+            const ranked      = N.rankItems(noterItems, prefix);
+            const suggestions = ranked.map(i => N.toMonaco(i, range));
+
+            return { suggestions, incomplete: result.isIncomplete ?? false };
+          } catch { return { suggestions: [] }; }
+        });
+      },
+
+      // Milestone 2 — fetch full docs when user highlights an item
+      async resolveCompletionItem(monacoItem) {
+        return N.resolve(monacoItem, serverId);
       },
     });
-  }
 
-  function _lspCompletionToMonaco(item, range) {
-    const KIND_MAP = {
-      1: 17, 2: 2, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6,
-      8: 7, 9: 8, 10: 9, 11: 4, 12: 11, 13: 12,
-      14: 13, 15: 14, 16: 15, 17: 16, 18: 17, 19: 18,
-      20: 19, 21: 1, 22: 10, 23: 20, 24: 21, 25: 2,
-    };
-    const insertText = item.textEdit?.newText || item.insertText || item.label;
-    return {
-      label:       item.label,
-      kind:        KIND_MAP[item.kind] || 1,
-      detail:      item.detail || '',
-      documentation: item.documentation
-        ? { value: typeof item.documentation === 'string' ? item.documentation : item.documentation.value }
-        : undefined,
-      insertText,
-      insertTextRules: insertText?.includes('${')
-        ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
-        : undefined,
-      sortText:    item.sortText || item.label,
-      filterText:  item.filterText || item.label,
-      preselect:   item.preselect || false,
-      range,
-      additionalTextEdits: item.additionalTextEdits?.map(e => ({
-        range: _lspRangeToMonaco(e.range),
-        text:  e.newText,
-      })),
-    };
+    // Track which item the user actually accepted (for recent-use ranking)
+    monaco.editor.onDidChangeModelContent?.(() => {
+      // Best proxy: record when user commits a suggestion
+      // Monaco fires this after insertText; label comes from the last triggered item.
+      // Full tracking requires onDidAcceptSuggestion which isn't public —
+      // we record in resolveCompletionItem acceptance path instead.
+    });
   }
 
   // ── Monaco hover provider for LSP ────────────────────────────
@@ -222,22 +252,24 @@ window.LspClient = (() => {
     if (typeof monaco === 'undefined') return;
     monaco.languages.registerHoverProvider(languageId, {
       async provideHover(model, position) {
-        if (_servers[serverId]?.state !== 'running') return null;
+        if (!_caps(serverId).hover || _servers[serverId]?.state !== 'running') return null;
         const uri = model.uri.toString();
-        try {
-          const { result } = await window.electronAPI.lspRequest(serverId, 'textDocument/hover', {
-            textDocument: { uri },
-            position:     { line: position.lineNumber - 1, character: position.column - 1 },
-          });
-          if (!result?.contents) return null;
-          const value = Array.isArray(result.contents)
-            ? result.contents.map(c => typeof c === 'string' ? c : c.value).join('\n\n')
-            : typeof result.contents === 'string' ? result.contents : result.contents.value;
-          return {
-            contents: [{ value }],
-            range: result.range ? _lspRangeToMonaco(result.range) : undefined,
-          };
-        } catch { return null; }
+        return _timed('hover', async () => {
+          try {
+            const { result } = await window.electronAPI.lspRequest(serverId, 'textDocument/hover', {
+              textDocument: { uri },
+              position:     { line: position.lineNumber - 1, character: position.column - 1 },
+            });
+            if (!result?.contents) return null;
+            const value = Array.isArray(result.contents)
+              ? result.contents.map(c => typeof c === 'string' ? c : c.value).join('\n\n')
+              : typeof result.contents === 'string' ? result.contents : result.contents.value;
+            return {
+              contents: [{ value }],
+              range: result.range ? _lspRangeToMonaco(result.range) : undefined,
+            };
+          } catch { return null; }
+        });
       },
     });
   }
@@ -247,8 +279,8 @@ window.LspClient = (() => {
     if (typeof monaco === 'undefined') return;
     monaco.languages.registerDefinitionProvider(languageId, {
       async provideDefinition(model, position) {
-        if (_servers[serverId]?.state !== 'running') return null;
-        try {
+        if (!_caps(serverId).definition || _servers[serverId]?.state !== 'running') return null;
+        return _timed('definition', async () => { try {
           const { result } = await window.electronAPI.lspRequest(serverId, 'textDocument/definition', {
             textDocument: { uri: model.uri.toString() },
             position:     { line: position.lineNumber - 1, character: position.column - 1 },
@@ -256,10 +288,10 @@ window.LspClient = (() => {
           if (!result) return null;
           const locs = Array.isArray(result) ? result : [result];
           return locs.map(loc => ({
-            uri:   monaco.Uri.parse(loc.uri),
+            uri:   _lspUri(loc.uri),
             range: _lspRangeToMonaco(loc.range),
           }));
-        } catch { return null; }
+        } catch { return null; } });
       },
     });
   }
@@ -269,7 +301,7 @@ window.LspClient = (() => {
     if (typeof monaco === 'undefined') return;
     monaco.languages.registerReferenceProvider(languageId, {
       async provideReferences(model, position, ctx) {
-        if (_servers[serverId]?.state !== 'running') return null;
+        if (!_caps(serverId).references || _servers[serverId]?.state !== 'running') return null;
         try {
           const { result } = await window.electronAPI.lspRequest(serverId, 'textDocument/references', {
             textDocument: { uri: model.uri.toString() },
@@ -277,7 +309,7 @@ window.LspClient = (() => {
             context:      { includeDeclaration: ctx.includeDeclaration },
           });
           return (result || []).map(loc => ({
-            uri:   monaco.Uri.parse(loc.uri),
+            uri:   _lspUri(loc.uri),
             range: _lspRangeToMonaco(loc.range),
           }));
         } catch { return null; }
@@ -290,7 +322,7 @@ window.LspClient = (() => {
     if (typeof monaco === 'undefined') return;
     monaco.languages.registerRenameProvider(languageId, {
       async provideRenameEdits(model, position, newName) {
-        if (_servers[serverId]?.state !== 'running') return null;
+        if (!_caps(serverId).rename || _servers[serverId]?.state !== 'running') return null;
         try {
           const { result } = await window.electronAPI.lspRequest(serverId, 'textDocument/rename', {
             textDocument: { uri: model.uri.toString() },
@@ -301,7 +333,7 @@ window.LspClient = (() => {
           const edits = [];
           for (const [uri, fileEdits] of Object.entries(result.changes || {})) {
             for (const edit of fileEdits) {
-              edits.push({ resource: monaco.Uri.parse(uri), edit: { range: _lspRangeToMonaco(edit.range), text: edit.newText } });
+              edits.push({ resource: _lspUri(uri), edit: { range: _lspRangeToMonaco(edit.range), text: edit.newText } });
             }
           }
           return { edits };
@@ -401,7 +433,7 @@ window.LspClient = (() => {
     for (const [uri, fileEdits] of Object.entries(lspEdit.changes || {})) {
       for (const e of fileEdits) {
         edits.push({
-          resource:  monaco.Uri.parse(uri),
+          resource:  _lspUri(uri),
           versionId: null,
           textEdit: {
             range: _lspRangeToMonaco(e.range),
@@ -416,7 +448,7 @@ window.LspClient = (() => {
           const uri = change.textDocument?.uri || change.uri;
           for (const e of change.edits) {
             edits.push({
-              resource:  monaco.Uri.parse(uri),
+              resource:  _lspUri(uri),
               versionId: null,
               textEdit:  { range: _lspRangeToMonaco(e.range), text: e.newText },
             });
@@ -527,6 +559,22 @@ window.LspClient = (() => {
     };
   }
 
+  // Convert a tsserver URI to a Monaco Uri object.
+  // tsserver encodes Windows paths as file:///e%3A/path (lowercase, encoded colon).
+  // monaco.Uri.file() produces the canonical format Monaco uses for model lookups.
+  // Without this, "Go to Definition" across files silently creates a blank model
+  // instead of navigating to the open tab — same class of bug as DiagnosticStore URI fix.
+  function _lspUri(rawUri) {
+    try {
+      const decoded = decodeURIComponent(rawUri);
+      // Strip scheme: "file:///e:/path" → "e:/path" (Windows) or "/home/..." (Unix)
+      const filePath = decoded.replace(/^file:\/\/\//, '').replace(/^file:\/\//, '');
+      return monaco.Uri.file(filePath);
+    } catch {
+      return monaco.Uri.parse(rawUri);
+    }
+  }
+
   function _getWorkspaceUri() {
     const root = window.workspaceRoot || window.currentWorkspace;
     if (!root) return null;
@@ -539,6 +587,76 @@ window.LspClient = (() => {
       if (tab.model && tab.model.uri.toString() === uri) return tab.model.getValue();
     }
     return null;
+  }
+
+  // ── Capability Matrix ─────────────────────────────────────────
+  // Conservative static defaults (used from 'starting' until initialize responds).
+  // Mirrors noter-core-api/src/types/capability.rs — keep in sync.
+  const _SERVER_DEFAULTS = {
+    typescript: { hover:true, completion:true, signatureHelp:true, diagnostics:true,
+                  definition:true, references:true, rename:true, codeActions:true,
+                  inlayHints:true, semanticTokens:true, formatting:true },
+    pyright:    { hover:true, completion:true, signatureHelp:true, diagnostics:true,
+                  definition:true, references:true, rename:true, codeActions:true,
+                  inlayHints:false, semanticTokens:true, formatting:false },
+    clangd:     { hover:true, completion:true, signatureHelp:true, diagnostics:true,
+                  definition:true, references:true, rename:true, codeActions:true,
+                  inlayHints:true, semanticTokens:false, formatting:true },
+    jdtls:      { hover:true, completion:true, signatureHelp:true, diagnostics:true,
+                  definition:true, references:true, rename:true, codeActions:true,
+                  inlayHints:false, semanticTokens:false, formatting:true },
+  };
+  const _NONE_CAPS = { hover:false, completion:false, signatureHelp:false, diagnostics:false,
+                        definition:false, references:false, rename:false, codeActions:false,
+                        inlayHints:false, semanticTokens:false, formatting:false };
+
+  function _defaultCapabilities(serverId) {
+    return { ...(_SERVER_DEFAULTS[serverId] || _NONE_CAPS) };
+  }
+
+  function _deriveCapabilities(serverCaps) {
+    const has = (key) => serverCaps[key] != null && serverCaps[key] !== false;
+    return {
+      hover:          has('hoverProvider'),
+      completion:     has('completionProvider'),
+      signatureHelp:  has('signatureHelpProvider'),
+      diagnostics:    true,
+      definition:     has('definitionProvider'),
+      references:     has('referencesProvider'),
+      rename:         has('renameProvider'),
+      codeActions:    has('codeActionProvider'),
+      inlayHints:     has('inlayHintProvider'),
+      semanticTokens: has('semanticTokensProvider'),
+      formatting:     has('documentFormattingProvider'),
+    };
+  }
+
+  function _caps(serverId) {
+    return _servers[serverId]?.capabilities || _NONE_CAPS;
+  }
+
+  function _initOptions(serverId) {
+    if (serverId === 'typescript') {
+      return {
+        // tsserver preferences — enable all inlay hints for maximum value
+        preferences: {
+          includeInlayParameterNameHints:                   'all',
+          includeInlayParameterNameHintsWhenArgumentMatchesName: false,
+          includeInlayFunctionParameterTypeHints:           true,
+          includeInlayVariableTypeHints:                    true,
+          includeInlayPropertyDeclarationTypeHints:         true,
+          includeInlayFunctionLikeReturnTypeHints:          true,
+          includeInlayEnumMemberValueHints:                 true,
+          importModuleSpecifierPreference:                  'shortest',
+        },
+        tsserver: {
+          logVerbosity: 'off',
+          trace:        'off',
+        },
+      };
+    }
+    if (serverId === 'pyright') return { pythonPath: null };
+    return undefined;
   }
 
   function _clientCapabilities() {
@@ -687,6 +805,38 @@ window.LspClient = (() => {
     document.dispatchEvent(new CustomEvent('lsp:status-changed', { detail: getStatus() }));
   }
 
+  // ── Monaco built-in TS ownership control ──────────────────────
+  // Provider ownership rules (enforced here, matches Rust LspCapabilityMatrix docs):
+  //   Hover      → Monaco built-in + LSP   (additive, more info = better)
+  //   Completion → LSP ONLY               (Monaco gives duplicate suggestions)
+  //   Diagnostics→ Monaco syntax + LSP semantic (different sources, no conflict)
+  //   Rename     → LSP ONLY
+  //   References → LSP ONLY
+  //
+  // When tsserver is running we disable Monaco's SEMANTIC layer (completions, semantic
+  // diagnostics). Syntax highlighting + syntax errors stay active — Monaco is faster
+  // for these. When tsserver stops we restore Monaco semantics as a fallback.
+
+  function _disableMonacoSemantics() {
+    if (typeof monaco === 'undefined') return;
+    const tsD = monaco.languages.typescript.typescriptDefaults;
+    const jsD = monaco.languages.typescript.javascriptDefaults;
+    // Disable semantic validation — LSP provides richer diagnostics
+    tsD.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false, noSuggestionDiagnostics: true });
+    jsD.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false, noSuggestionDiagnostics: true });
+    // Disable inlay hints from Monaco web worker — LSP provides them via tsserver
+    tsD.setInlayHintsOptions?.({ includeInlayParameterNameHints: 'none', includeInlayFunctionLikeReturnTypeHints: false, includeInlayVariableTypeHints: false });
+    jsD.setInlayHintsOptions?.({ includeInlayParameterNameHints: 'none', includeInlayFunctionLikeReturnTypeHints: false, includeInlayVariableTypeHints: false });
+  }
+
+  function _restoreMonacoSemantics() {
+    if (typeof monaco === 'undefined') return;
+    const tsD = monaco.languages.typescript.typescriptDefaults;
+    const jsD = monaco.languages.typescript.javascriptDefaults;
+    tsD.setDiagnosticsOptions({ noSemanticValidation: false, noSyntaxValidation: false, noSuggestionDiagnostics: false });
+    jsD.setDiagnosticsOptions({ noSemanticValidation: true,  noSyntaxValidation: false, noSuggestionDiagnostics: true });
+  }
+
   // ── Public API ────────────────────────────────────────────────
   function getStatus() {
     return Object.entries(_servers).map(([id, s]) => ({
@@ -695,15 +845,11 @@ window.LspClient = (() => {
   }
 
   function getDiagnostics(uri) {
-    return _diagStore.get(uri) || [];
+    return window.DiagnosticStore?.get(uri) ?? [];
   }
 
   function getAllDiagnostics() {
-    const all = [];
-    for (const [uri, diags] of _diagStore) {
-      for (const d of diags) all.push({ uri, ...d });
-    }
-    return all;
+    return window.DiagnosticStore?.getAll() ?? [];
   }
 
   function restartServer(serverId) {
@@ -752,6 +898,7 @@ window.LspClient = (() => {
   return {
     init, getStatus, getDiagnostics, getAllDiagnostics,
     restartServer, onDocumentOpen, onDocumentChange, onDocumentClose,
+    getLatencyStats,
     LANG_SERVER,
   };
 })();

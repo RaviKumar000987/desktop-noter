@@ -1,24 +1,2 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum SymbolKind {
-    Function,
-    Class,
-    Method,
-    Variable,
-    Constant,
-    Interface,
-    Enum,
-    Import,
-    Export,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Symbol {
-    pub name: String,
-    pub kind: SymbolKind,
-    pub file: String,
-    pub line: u32,
-    pub column: u32,
-    pub container: Option<String>,
-}
+// Types moved to noter-core-api. This file is intentionally empty.
+// Use: noter_core_api::{Symbol, SymbolKind, FileRef, Range, Position}

@@ -1,0 +1,15 @@
+[package]
+name = "noter-runtime"
+description = "Supervisor / kernel for all noter engines — ServiceRegistry, EventBus, Circuit Breaker, BootCoordinator."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+async-trait.workspace = true
+noter-core-api = { path = "../noter-core-api" }

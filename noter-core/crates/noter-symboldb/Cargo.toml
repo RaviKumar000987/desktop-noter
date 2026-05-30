@@ -11,4 +11,4 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 rusqlite = { version = "0.31", features = ["bundled"] }
-noter-indexer = { path = "../noter-indexer" }
+noter-core-api = { path = "../noter-core-api" }

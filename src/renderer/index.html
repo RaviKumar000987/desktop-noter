@@ -16,6 +16,8 @@
     <link rel="stylesheet" href="../styles/phase7.css" />
     <!-- Performance: CSS containment + content-visibility -->
     <link rel="stylesheet" href="../styles/perf.css" />
+    <!-- Premier UI — loads last, overrides all previous stylesheets -->
+    <link rel="stylesheet" href="../styles/noter-premium.css" />
 
     <!-- xterm.js 5.x — MUST load before Monaco so UMD globals are set first -->
     <link rel="stylesheet" href="../../node_modules/xterm/css/xterm.css" />
@@ -83,6 +85,15 @@
           <div class="menu-option" id="selectAllAction">Select All <span class="shortcut">Ctrl+A</span></div>
           <div class="separator"></div>
           <div class="menu-option" id="duplicateLineAction">Duplicate Line <span class="shortcut">Ctrl+D</span></div>
+          <div class="menu-option" id="moveLineUpAction">Move Line Up <span class="shortcut">Alt+↑</span></div>
+          <div class="menu-option" id="moveLineDownAction">Move Line Down <span class="shortcut">Alt+↓</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="toggleLineCommentAction">Toggle Line Comment <span class="shortcut">Ctrl+/</span></div>
+          <div class="menu-option" id="toggleBlockCommentAction">Toggle Block Comment <span class="shortcut">Ctrl+⇧+/</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="formatDocumentAction">Format Document <span class="shortcut">⇧+Alt+F</span></div>
+          <div class="menu-option" id="organizeImportsAction">Organize Imports</div>
+          <div class="menu-option" id="trimWhitespaceAction">Trim Trailing Whitespace</div>
           <div class="separator"></div>
           <div class="menu-option" id="findAction">Find <span class="shortcut">Ctrl+F</span></div>
           <div class="menu-option" id="replaceAction">Find &amp; Replace <span class="shortcut">Ctrl+H</span></div>
@@ -93,18 +104,101 @@
       <div class="menu-item">
         View
         <div class="dropdown">
+          <div class="menu-option" id="commandPaletteMenu">Command Palette <span class="shortcut">Ctrl+⇧+P</span></div>
+          <div class="separator"></div>
           <div class="menu-option" id="toggleExplorerMenu">Toggle Explorer <span class="shortcut">Ctrl+B</span></div>
+          <div class="menu-option" id="toggleTerminalMenu">Toggle Terminal <span class="shortcut">Ctrl+`</span></div>
+          <div class="menu-option" id="toggleSplitMenu">Split Editor <span class="shortcut">Ctrl+\</span></div>
+          <div class="menu-option" id="globalSearchMenu">Global Search <span class="shortcut">Ctrl+⇧+F</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="toggleMinimapMenu">Toggle Minimap</div>
+          <div class="menu-option" id="toggleBreadcrumbMenu">Toggle Breadcrumb</div>
+          <div class="menu-option" id="wordWrap">Toggle Word Wrap</div>
+          <div class="menu-option" id="toggleLineNumbersMenu">Toggle Line Numbers</div>
           <div class="separator"></div>
           <div class="menu-option" id="zoomIn">Zoom In <span class="shortcut">Ctrl++</span></div>
           <div class="menu-option" id="zoomOut">Zoom Out <span class="shortcut">Ctrl+−</span></div>
           <div class="menu-option" id="resetZoom">Reset Zoom <span class="shortcut">Ctrl+0</span></div>
+        </div>
+      </div>
+
+      <!-- Selection menu -->
+      <div class="menu-item">
+        Selection
+        <div class="dropdown">
+          <div class="menu-option" id="selSelectAll">Select All <span class="shortcut">Ctrl+A</span></div>
+          <div class="menu-option" id="selExpandLine">Expand Line Selection <span class="shortcut">Ctrl+L</span></div>
           <div class="separator"></div>
-          <div class="menu-option" id="wordWrap">Toggle Word Wrap</div>
+          <div class="menu-option" id="selAddCursorAbove">Add Cursor Above <span class="shortcut">Ctrl+Alt+↑</span></div>
+          <div class="menu-option" id="selAddCursorBelow">Add Cursor Below <span class="shortcut">Ctrl+Alt+↓</span></div>
+          <div class="menu-option" id="selAddNextOccurrence">Add Next Occurrence <span class="shortcut">Ctrl+D</span></div>
+          <div class="menu-option" id="selSelectAllOccurrences">Select All Occurrences <span class="shortcut">Ctrl+⇧+L</span></div>
           <div class="separator"></div>
-          <div class="menu-option" id="toggleTerminalMenu">Terminal <span class="shortcut">Ctrl+J</span></div>
-          <div class="menu-option" id="toggleSplitMenu">Split Editor <span class="shortcut">Ctrl+\</span></div>
-          <div class="menu-option" id="commandPaletteMenu">Command Palette <span class="shortcut">Ctrl+⇧+P</span></div>
-          <div class="menu-option" id="globalSearchMenu">Global Search <span class="shortcut">Ctrl+⇧+F</span></div>
+          <div class="menu-option" id="selCopyLineUp">Copy Line Up <span class="shortcut">⇧+Alt+↑</span></div>
+          <div class="menu-option" id="selCopyLineDown">Copy Line Down <span class="shortcut">⇧+Alt+↓</span></div>
+          <div class="menu-option" id="selIndent">Indent Line <span class="shortcut">Tab</span></div>
+          <div class="menu-option" id="selOutdent">Outdent Line <span class="shortcut">⇧+Tab</span></div>
+        </div>
+      </div>
+
+      <!-- Go menu -->
+      <div class="menu-item">
+        Go
+        <div class="dropdown">
+          <div class="menu-option" id="goToDefinition">Go to Definition <span class="shortcut">F12</span></div>
+          <div class="menu-option" id="goToTypeDefinition">Go to Type Definition</div>
+          <div class="menu-option" id="goToReferences">Go to References <span class="shortcut">⇧+F12</span></div>
+          <div class="menu-option" id="goToImplementation">Go to Implementation <span class="shortcut">Ctrl+F12</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="goToSymbol">Go to Symbol <span class="shortcut">Ctrl+⇧+O</span></div>
+          <div class="menu-option" id="goToLine">Go to Line <span class="shortcut">Ctrl+G</span></div>
+          <div class="menu-option" id="goToFile">Go to File <span class="shortcut">Ctrl+P</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="goBack">Go Back <span class="shortcut">Alt+←</span></div>
+          <div class="menu-option" id="goForward">Go Forward <span class="shortcut">Alt+→</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="goJumpToBracket">Jump to Bracket <span class="shortcut">Ctrl+⇧+\</span></div>
+          <div class="menu-option" id="goNextProblem">Next Problem <span class="shortcut">F8</span></div>
+          <div class="menu-option" id="goPrevProblem">Previous Problem <span class="shortcut">⇧+F8</span></div>
+        </div>
+      </div>
+
+      <!-- Git menu -->
+      <div class="menu-item">
+        Git
+        <div class="dropdown">
+          <div class="menu-option" id="gitStageAll">Stage All Changes</div>
+          <div class="menu-option" id="gitUnstageAll">Unstage All Changes</div>
+          <div class="menu-option" id="gitCommit">Commit… <span class="shortcut">Ctrl+⇧+G</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="gitPush">Push</div>
+          <div class="menu-option" id="gitPull">Pull</div>
+          <div class="menu-option" id="gitFetch">Fetch</div>
+          <div class="separator"></div>
+          <div class="menu-option" id="gitCreateBranch">Create Branch…</div>
+          <div class="menu-option" id="gitSwitchBranch">Switch Branch…</div>
+          <div class="menu-option" id="gitMergeBranch">Merge Branch…</div>
+          <div class="separator"></div>
+          <div class="menu-option" id="gitViewDiff">View Diff</div>
+          <div class="menu-option" id="gitViewBlame">View Blame</div>
+          <div class="menu-option" id="gitRevertFile">Revert File Changes</div>
+        </div>
+      </div>
+
+      <!-- Run menu -->
+      <div class="menu-item">
+        Run
+        <div class="dropdown">
+          <div class="menu-option" id="runFile">Run File <span class="shortcut">F5</span></div>
+          <div class="menu-option" id="runInTerminal">Run in Terminal <span class="shortcut">Ctrl+F5</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="runWithNode">Run with Node.js</div>
+          <div class="menu-option" id="runWithPython">Run with Python</div>
+          <div class="menu-option" id="runWithDeno">Run with Deno</div>
+          <div class="separator"></div>
+          <div class="menu-option" id="stopProcess">Stop Process <span class="shortcut">⇧+F5</span></div>
+          <div class="separator"></div>
+          <div class="menu-option" id="openDebugConsole">Open Debug Console <span class="shortcut">Ctrl+⇧+Y</span></div>
         </div>
       </div>
 
@@ -122,6 +216,9 @@
       <div class="menu-item">
         Help
         <div class="dropdown">
+          <div class="menu-option" id="openSettingsJson">Open Settings (JSON) <span class="shortcut">Ctrl+,</span></div>
+          <div class="menu-option" id="openDefaultSettings">Open Default Settings</div>
+          <div class="separator"></div>
           <div class="menu-option" id="documentation">Documentation</div>
           <div class="menu-option" id="shortcuts">Shortcuts</div>
           <div class="separator"></div>
@@ -370,6 +467,7 @@
     ══════════════════════════════════════════ -->
     <div id="statusbar">
       <div class="status-left">
+        <span id="git-branch" title="Git branch"></span>
         <span id="language">Plain Text</span>
         <span>UTF-8</span>
       </div>
@@ -407,6 +505,8 @@
     <script src="../shared/constants.js"></script>
 
     <!-- ── 2. Core foundations — load before app.js ──────── -->
+    <!--    Settings JSON engine: VS Code-style settings.json reader -->
+    <script src="./settings/settings-json.js"></script>
     <!--    Command registry  (src/renderer/ui/) -->
     <script src="./ui/command-registry.js"></script>
     <!--    Keybindings engine (src/renderer/ui/) -->
@@ -450,13 +550,19 @@
     <script src="./ui/welcome.js"></script>
 
     <!-- ── 6. Language intelligence platform ─────────────── -->
+    <!--    Editor context menu: right-click actions for editor -->
+    <script src="./editor/editor-context-menu.js"></script>
     <!--    Monaco TS/JS config: compiler opts, inlay hints, type stubs -->
     <script src="./editor/monaco-ts-config.js"></script>
     <!--    IntelliSense engine: snippets, workspace indexer, hover docs -->
     <script src="./editor/intellisense.js"></script>
     <!--    File index DB: IndexedDB symbol store for incremental indexing -->
     <script src="./editor/file-index-db.js"></script>
-    <!--    LSP client: pyright / clangd / jdtls providers + diagnostics -->
+    <!--    Diagnostic store: single source of truth for LSP diagnostics (Week 3 prep) -->
+    <script src="./editor/diagnostic-store.js"></script>
+    <!--    Completion normalizer: LSP→NoterItem→Monaco, ranking, resolve (Week 2) -->
+    <script src="./editor/completion-normalizer.js"></script>
+    <!--    LSP client: TypeScript/pyright/clangd/jdtls providers + diagnostics -->
     <script src="./editor/lsp-client.js"></script>
     <!--    LSP manager: crash recovery, request queuing, health checks -->
     <script src="./editor/lsp-manager.js"></script>

@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "noter-napi",
     "noter-bin",
+    "crates/noter-core-api",
+    "crates/noter-runtime",
     "crates/noter-search",
     "crates/noter-indexer",
     "crates/noter-symboldb",
@@ -42,3 +44,9 @@ crossbeam-channel = "0.5"
 # IPC with Electron
 napi = { version = "2", features = ["napi4"] }
 napi-derive = "2"
+# LSP protocol types (boundary-only — convert to noter-core-api types immediately)
+lsp-types = "0.95"
+# Async trait support
+async-trait = "0.1"
+# Stable unique IDs for symbols (v5 = deterministic from content hash)
+uuid = { version = "1", features = ["v5", "serde"] }

@@ -119,4 +119,98 @@ contextBridge.exposeInMainWorld("electronAPI", {
   nativeSearchSymbols:  (dbPath, query)        => ipcRenderer.invoke("native-search-symbols", { dbPath, query }),
   nativeCacheSet:       (dbPath, ns, key, val) => ipcRenderer.invoke("native-cache-set", { dbPath, namespace: ns, key, value: val }),
   nativeCacheGet:       (dbPath, ns, key)      => ipcRenderer.invoke("native-cache-get", { dbPath, namespace: ns, key }),
+
+  // ── Settings JSON ─────────────────────────────────────────────
+  // VS Code-style settings.json — read, write, watch for changes.
+  settingsJsonRead:         ()      => ipcRenderer.invoke("settings-json:read"),
+  settingsJsonReadRaw:      ()      => ipcRenderer.invoke("settings-json:read-raw"),
+  settingsJsonWriteRaw:     (text)  => ipcRenderer.invoke("settings-json:write-raw", text),
+  settingsJsonGetPath:      ()      => ipcRenderer.invoke("settings-json:get-path"),
+  settingsJsonGetDefaults:  ()      => ipcRenderer.invoke("settings-json:get-defaults"),
+  onSettingsJsonChanged:    (cb)    => ipcRenderer.on("settings-json:changed", (_e, s) => cb(s)),
+  offSettingsJsonChanged:   ()      => ipcRenderer.removeAllListeners("settings-json:changed"),
+});
+
+// ── window.noter — Rust engine gateway ────────────────────────────────────────
+// All Rust ↔ Electron IPC lives here. Namespaces are locked — never add flat
+// methods to this object. Every method maps to a typed IPC contract in
+// noter-core-api/src/ipc/*.rs and its TypeScript mirror in src/shared/ipc-types.ts
+//
+// Namespaces reserved (stubs filled in as phases ship):
+//   noter.lsp.*       Phase 1 — Language servers
+//   noter.search.*    Phase 1 — Symbol + text search
+//   noter.index.*     Phase 1 — Workspace indexing
+//   noter.git.*       Phase 3 — Git engine
+//   noter.graph.*     Phase 2 — Code / dependency graph
+//   noter.ai.*        Phase 2 — AI context engine
+//   noter.workspace.* Phase 1.5 — Project intelligence
+//   noter.runtime.*   Phase 0.5 — Service health
+//
+contextBridge.exposeInMainWorld("noter", {
+
+  // ── LSP — Language server lifecycle & protocol ──────────────────────────
+  lsp: {
+    start:   (req)                   => ipcRenderer.invoke("noter:lsp:start",    req),
+    stop:    (req)                   => ipcRenderer.invoke("noter:lsp:stop",     req),
+    request: (serverId, method, p)   => ipcRenderer.invoke("noter:lsp:request",  { serverId, method, params: p }),
+    notify:  (serverId, method, p)   => ipcRenderer.send(  "noter:lsp:notify",   { serverId, method, params: p }),
+    status:  ()                      => ipcRenderer.invoke("noter:lsp:status"),
+    detect:  ()                      => ipcRenderer.invoke("noter:lsp:detect"),
+
+    onMessage:      (cb) => ipcRenderer.on("noter:lsp:message",        (_e, d) => cb(d)),
+    onServerStatus: (cb) => ipcRenderer.on("noter:lsp:server-status",  (_e, d) => cb(d)),
+    offMessage:     ()   => ipcRenderer.removeAllListeners("noter:lsp:message"),
+    offServerStatus:()   => ipcRenderer.removeAllListeners("noter:lsp:server-status"),
+  },
+
+  // ── Search — symbol search + workspace text search ──────────────────────
+  search: {
+    symbols: (req) => ipcRenderer.invoke("noter:search:symbols", req),
+    text:    (req) => ipcRenderer.invoke("noter:search:text",    req),
+  },
+
+  // ── Index — workspace indexing ──────────────────────────────────────────
+  index: {
+    workspace:      (req) => ipcRenderer.invoke("noter:index:workspace", req),
+    onProgress:     (cb)  => ipcRenderer.on("noter:index:progress",  (_e, d) => cb(d)),
+    onComplete:     (cb)  => ipcRenderer.on("noter:index:complete",  (_e, d) => cb(d)),
+    offProgress:    ()    => ipcRenderer.removeAllListeners("noter:index:progress"),
+    offComplete:    ()    => ipcRenderer.removeAllListeners("noter:index:complete"),
+  },
+
+  // ── Runtime — service health (Phase 0.5) ───────────────────────────────
+  runtime: {
+    serviceStates:        ()    => ipcRenderer.invoke("noter:runtime:states"),
+    onServiceStateChange: (cb)  => ipcRenderer.on("noter:runtime:state-changed", (_e, d) => cb(d)),
+    offServiceStateChange:()    => ipcRenderer.removeAllListeners("noter:runtime:state-changed"),
+  },
+
+  // ── Git — Rust git engine (Phase 3) ────────────────────────────────────
+  git: {
+    status:   (req) => ipcRenderer.invoke("noter:git:status",   req),
+    diff:     (req) => ipcRenderer.invoke("noter:git:diff",     req),
+    log:      (req) => ipcRenderer.invoke("noter:git:log",      req),
+    branches: (req) => ipcRenderer.invoke("noter:git:branches", req),
+  },
+
+  // ── Graph — code / dependency graph (Phase 2) ──────────────────────────
+  graph: {
+    referencesTo:   (req) => ipcRenderer.invoke("noter:graph:refs-to",   req),
+    referencesFrom: (req) => ipcRenderer.invoke("noter:graph:refs-from", req),
+    impact:         (req) => ipcRenderer.invoke("noter:graph:impact",    req),
+  },
+
+  // ── AI — context engine (Phase 2) ──────────────────────────────────────
+  ai: {
+    context:    (req) => ipcRenderer.invoke("noter:ai:context",    req),
+    embeddings: (req) => ipcRenderer.invoke("noter:ai:embeddings", req),
+    query:      (req) => ipcRenderer.invoke("noter:ai:query",      req),
+  },
+
+  // ── Workspace — project intelligence (Phase 1.5) ───────────────────────
+  workspace: {
+    scan:       (req) => ipcRenderer.invoke("noter:workspace:scan",    req),
+    projectMap: (req) => ipcRenderer.invoke("noter:workspace:map",     req),
+    memory:     (req) => ipcRenderer.invoke("noter:workspace:memory",  req),
+  },
 });

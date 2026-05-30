@@ -598,6 +598,34 @@ function updateStatusBar() {
   if (fileEl) fileEl.textContent = tab ? tab.title : "Untitled";
 }
 
+// Git branch — refreshed via Rust native on folder open / periodic tick
+let _gitBranchTimer = null;
+async function updateGitBranch() {
+  const root = explorerState?.rootPath;
+  const el = document.getElementById("git-branch");
+  if (!el) return;
+  if (!root || !window.electronAPI?.nativeGitStatus) {
+    el.textContent = "";
+    return;
+  }
+  try {
+    const status = await window.electronAPI.nativeGitStatus(root);
+    if (!status) { el.textContent = ""; return; }
+    const changed = status.files?.length || 0;
+    el.textContent = `⎇ ${status.branch}${changed ? ` +${changed}` : ""}`;
+    el.style.color = changed ? "#f9e2af" : "#a6e3a1";
+  } catch {
+    el.textContent = "";
+  }
+}
+
+function scheduleGitRefresh() {
+  clearTimeout(_gitBranchTimer);
+  updateGitBranch();
+  // Re-check every 8s while a workspace is open
+  _gitBranchTimer = setInterval(updateGitBranch, 8000);
+}
+
 function updateZoomStatus() {
   const el = document.getElementById("zoomStatus");
   if (el) el.textContent = `${Math.round((editorFontSize / 18) * 100)}%`;
@@ -1015,12 +1043,30 @@ async function _vexLoadChildren(node) {
   }
 }
 
+// Find a node by path in the live _vexRoots tree (recursive).
+function _findVexNode(nodes, path) {
+  for (const n of nodes) {
+    if (n.path === path) return n;
+    if (n.children?.length) {
+      const found = _findVexNode(n.children, path);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 async function _vexToggleFolder(node) {
-  if (node.expanded) {
-    explorerState.expandedPaths.delete(node.path);
+  // node is a spread copy from _tree — find the ORIGINAL in _vexRoots.
+  const original = _findVexNode(_vexRoots, node.path);
+  if (!original) return;
+
+  if (original.expanded) {
+    original.expanded = false;
+    explorerState.expandedPaths.delete(original.path);
   } else {
-    explorerState.expandedPaths.add(node.path);
-    if (!node.children) await _vexLoadChildren(node);
+    original.expanded = true;
+    explorerState.expandedPaths.add(original.path);
+    if (!original.children) await _vexLoadChildren(original);
   }
   VirtualExplorer.setTree(_vexRoots);
   saveSessionState();
@@ -1064,6 +1110,22 @@ function toggleSidebar(force) {
   if (btn) btn.classList.toggle("active", sidebarVisible);
   saveSessionState();
 }
+
+// Restore the correct explorer display based on whether a folder is open.
+// Called by activity-bar.js when switching back to explorer mode.
+window.restoreExplorerView = function () {
+  const noFolder  = document.getElementById("no-folder-msg");
+  const expContent = document.getElementById("explorer-content");
+  if (explorerState.rootPath) {
+    // Folder is open — show tree, hide "no folder" message
+    if (noFolder)   noFolder.style.display   = "none";
+    if (expContent) expContent.style.display = "flex";
+  } else {
+    // No folder open — show prompt, hide tree
+    if (noFolder)   noFolder.style.display   = "";
+    if (expContent) expContent.style.display = "none";
+  }
+};
 
 async function openExplorerFolder(folderPath) {
   if (!folderPath) return;
@@ -2518,6 +2580,39 @@ async function openFolderAsWorkspace(folderPath) {
   await openExplorerFolder(folderPath);
   await WorkspaceManager.activate(folderPath);
   showToast(`Opened: ${basename(folderPath)}`, "success");
+
+  // Rust: git branch in status bar
+  scheduleGitRefresh();
+
+  // Rust: background workspace indexing (non-blocking)
+  _triggerWorkspaceIndex(folderPath);
+}
+
+// ── Background workspace indexer (Rust) ──────────────────────────────────────
+const _NOTER_APPDATA = (window.electronAPI?.getAppDataPath?.() || "") + "/noter";
+
+function _wsDbPath(folderPath) {
+  // Stable DB path per workspace — hash folder name
+  const safe = folderPath.replace(/[^a-z0-9]/gi, "_").slice(-40);
+  return `${_NOTER_APPDATA}/idx_${safe}.db`;
+}
+
+let _indexTimer = null;
+function _triggerWorkspaceIndex(folderPath) {
+  clearTimeout(_indexTimer);
+  // Defer 2s so UI finishes loading first
+  _indexTimer = setTimeout(async () => {
+    if (!window.electronAPI?.nativeIndexWorkspace) return;
+    try {
+      const dbPath = _wsDbPath(folderPath);
+      const count = await window.electronAPI.nativeIndexWorkspace(folderPath, dbPath);
+      console.log(`[Rust] Indexed ${count} symbols in ${basename(folderPath)}`);
+      // Store dbPath globally so command palette can use it
+      window._noterSymbolDb = dbPath;
+    } catch (e) {
+      console.warn("[Rust] Indexing failed:", e.message);
+    }
+  }, 2000);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2587,6 +2682,27 @@ const actions = {
     const tab = TabManager.getActive();
     if (!tab) return;
     if (!tab.filePath) return actions.saveAsFile();
+
+    // Format on save — if enabled in settings.json
+    if (typeof SettingsJSON !== 'undefined' && SettingsJSON.shouldFormatOnSave()) {
+      await window.editor.getAction('editor.action.formatDocument')?.run();
+    }
+
+    // If the active tab is settings.json itself, validate JSON before saving
+    const isSettingsFile = tab.filePath && tab.filePath.endsWith('settings.json');
+    if (isSettingsFile) {
+      const result = await window.electronAPI?.settingsJsonWriteRaw?.(window.editor.getValue());
+      if (result && !result.ok) {
+        showToast('settings.json has a JSON error — not saved', 'error', 3500);
+        return;
+      }
+      tab.isModified = false;
+      renderTabs();
+      updateTitleBar();
+      showToast('Settings saved — changes applied live', 'success');
+      closeAllMenus();
+      return;
+    }
 
     const ok = await window.electronAPI.saveFile({
       path: tab.filePath,
@@ -2977,6 +3093,193 @@ document
 document.getElementById("reloadWindowMenu")?.addEventListener("click", () => {
   if (typeof CrashRecovery !== "undefined") CrashRecovery.markCleanExit();
   window.electronAPI?.reloadWindow?.();
+  closeAllMenus();
+});
+
+// ── Settings JSON shortcuts ──────────────────────────────────────
+document.getElementById("openSettingsJson")?.addEventListener("click", () => {
+  SettingsJSON?.openFile?.();
+  closeAllMenus();
+});
+document.getElementById("openDefaultSettings")?.addEventListener("click", () => {
+  SettingsJSON?.openDefaults?.();
+  closeAllMenus();
+});
+// Ctrl+, shortcut
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key === ",") {
+    e.preventDefault();
+    SettingsJSON?.openFile?.();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  NEW MENU ACTIONS — Edit extras, View extras, Selection, Go, Git, Run
+// ═══════════════════════════════════════════════════════════════
+
+// ── Edit extras ─────────────────────────────────────────────────
+function editorAction(id) {
+  if (!window.editor) return;
+  window.editor.trigger("menu", id, null);
+  closeAllMenus();
+}
+
+document.getElementById("moveLineUpAction")?.addEventListener("click", () =>
+  editorAction("editor.action.moveLinesUpAction"));
+document.getElementById("moveLineDownAction")?.addEventListener("click", () =>
+  editorAction("editor.action.moveLinesDownAction"));
+document.getElementById("toggleLineCommentAction")?.addEventListener("click", () =>
+  editorAction("editor.action.commentLine"));
+document.getElementById("toggleBlockCommentAction")?.addEventListener("click", () =>
+  editorAction("editor.action.blockComment"));
+document.getElementById("formatDocumentAction")?.addEventListener("click", () =>
+  editorAction("editor.action.formatDocument"));
+document.getElementById("organizeImportsAction")?.addEventListener("click", () =>
+  editorAction("editor.action.organizeImports"));
+document.getElementById("trimWhitespaceAction")?.addEventListener("click", () =>
+  editorAction("editor.action.trimTrailingWhitespace"));
+
+// ── View extras ─────────────────────────────────────────────────
+document.getElementById("toggleMinimapMenu")?.addEventListener("click", () => {
+  if (!window.editor) return;
+  const cur = window.editor.getOption(monaco.editor.EditorOption.minimap)?.enabled ?? true;
+  window.editor.updateOptions({ minimap: { enabled: !cur } });
+  closeAllMenus();
+});
+document.getElementById("toggleBreadcrumbMenu")?.addEventListener("click", () => {
+  const bc = document.getElementById("breadcrumb");
+  if (bc) bc.style.display = bc.style.display === "none" ? "" : "none";
+  closeAllMenus();
+});
+document.getElementById("toggleLineNumbersMenu")?.addEventListener("click", () => {
+  if (!window.editor) return;
+  const cur = window.editor.getOption(monaco.editor.EditorOption.lineNumbers);
+  window.editor.updateOptions({ lineNumbers: cur === "on" ? "off" : "on" });
+  closeAllMenus();
+});
+
+// ── Selection menu ───────────────────────────────────────────────
+document.getElementById("selSelectAll")?.addEventListener("click", () =>
+  editorAction("editor.action.selectAll"));
+document.getElementById("selExpandLine")?.addEventListener("click", () =>
+  editorAction("expandLineSelection"));
+document.getElementById("selAddCursorAbove")?.addEventListener("click", () =>
+  editorAction("editor.action.insertCursorAbove"));
+document.getElementById("selAddCursorBelow")?.addEventListener("click", () =>
+  editorAction("editor.action.insertCursorBelow"));
+document.getElementById("selAddNextOccurrence")?.addEventListener("click", () =>
+  editorAction("editor.action.addSelectionToNextFindMatch"));
+document.getElementById("selSelectAllOccurrences")?.addEventListener("click", () =>
+  editorAction("editor.action.selectHighlights"));
+document.getElementById("selCopyLineUp")?.addEventListener("click", () =>
+  editorAction("editor.action.copyLinesUpAction"));
+document.getElementById("selCopyLineDown")?.addEventListener("click", () =>
+  editorAction("editor.action.copyLinesDownAction"));
+document.getElementById("selIndent")?.addEventListener("click", () =>
+  editorAction("editor.action.indentLines"));
+document.getElementById("selOutdent")?.addEventListener("click", () =>
+  editorAction("editor.action.outdentLines"));
+
+// ── Go menu ─────────────────────────────────────────────────────
+document.getElementById("goToDefinition")?.addEventListener("click", () =>
+  editorAction("editor.action.revealDefinition"));
+document.getElementById("goToTypeDefinition")?.addEventListener("click", () =>
+  editorAction("editor.action.goToTypeDefinition"));
+document.getElementById("goToReferences")?.addEventListener("click", () =>
+  editorAction("editor.action.goToReferences"));
+document.getElementById("goToImplementation")?.addEventListener("click", () =>
+  editorAction("editor.action.goToImplementation"));
+document.getElementById("goToSymbol")?.addEventListener("click", () => {
+  editorAction("editor.action.quickOutline");
+});
+document.getElementById("goToLine")?.addEventListener("click", () =>
+  editorAction("editor.action.gotoLine"));
+document.getElementById("goToFile")?.addEventListener("click", () => {
+  if (typeof CommandPalette !== "undefined") CommandPalette.show();
+  closeAllMenus();
+});
+document.getElementById("goBack")?.addEventListener("click", () =>
+  editorAction("workbench.action.navigateBack"));
+document.getElementById("goForward")?.addEventListener("click", () =>
+  editorAction("workbench.action.navigateForward"));
+document.getElementById("goJumpToBracket")?.addEventListener("click", () =>
+  editorAction("editor.action.jumpToBracket"));
+document.getElementById("goNextProblem")?.addEventListener("click", () =>
+  editorAction("editor.action.marker.nextInFiles"));
+document.getElementById("goPrevProblem")?.addEventListener("click", () =>
+  editorAction("editor.action.marker.prevInFiles"));
+
+// ── Git menu ────────────────────────────────────────────────────
+function gitToast(msg) { showToast(msg, "info", 3000); closeAllMenus(); }
+
+document.getElementById("gitStageAll")?.addEventListener("click", () =>
+  gitToast("Git: Stage All — coming in Phase 3 (Git Visual Tooling)"));
+document.getElementById("gitUnstageAll")?.addEventListener("click", () =>
+  gitToast("Git: Unstage All — coming in Phase 3"));
+document.getElementById("gitCommit")?.addEventListener("click", () =>
+  gitToast("Git: Commit — coming in Phase 3"));
+document.getElementById("gitPush")?.addEventListener("click", () =>
+  gitToast("Git: Push — coming in Phase 3"));
+document.getElementById("gitPull")?.addEventListener("click", () =>
+  gitToast("Git: Pull — coming in Phase 3"));
+document.getElementById("gitFetch")?.addEventListener("click", () =>
+  gitToast("Git: Fetch — coming in Phase 3"));
+document.getElementById("gitCreateBranch")?.addEventListener("click", () =>
+  gitToast("Git: Create Branch — coming in Phase 3"));
+document.getElementById("gitSwitchBranch")?.addEventListener("click", () =>
+  gitToast("Git: Switch Branch — coming in Phase 3"));
+document.getElementById("gitMergeBranch")?.addEventListener("click", () =>
+  gitToast("Git: Merge Branch — coming in Phase 3"));
+document.getElementById("gitViewDiff")?.addEventListener("click", () =>
+  gitToast("Git: View Diff — coming in Phase 3"));
+document.getElementById("gitViewBlame")?.addEventListener("click", () =>
+  gitToast("Git: View Blame — coming in Phase 3"));
+document.getElementById("gitRevertFile")?.addEventListener("click", () =>
+  gitToast("Git: Revert File — coming in Phase 3"));
+
+// ── Run menu ────────────────────────────────────────────────────
+function runCurrentFile(runtime) {
+  closeAllMenus();
+  if (!window.editor) return showToast("No file open", "error");
+  const tab = TabManager.getActive?.();
+  const filePath = tab?.filePath;
+  if (!filePath) return showToast("Save the file first", "warn");
+
+  let cmd;
+  if (runtime === "auto") {
+    const ext = filePath.split(".").pop().toLowerCase();
+    const map = { js: "node", ts: "npx ts-node", py: "python", rs: "cargo run",
+                  rb: "ruby", go: "go run", php: "php", sh: "bash" };
+    const runner = map[ext];
+    if (!runner) return showToast(`No runner for .${ext} files`, "warn");
+    cmd = `${runner} "${filePath}"`;
+  } else {
+    cmd = `${runtime} "${filePath}"`;
+  }
+
+  if (typeof TerminalPanel !== "undefined") TerminalPanel.show();
+  setTimeout(() => window.electronAPI?.ptyCreate?.({ shell: "cmd.exe" })
+    .then(() => window.electronAPI?.ptyWrite?.(`${cmd}\r`))
+    .catch(() => {}), 200);
+}
+
+document.getElementById("runFile")?.addEventListener("click", () => runCurrentFile("auto"));
+document.getElementById("runInTerminal")?.addEventListener("click", () => {
+  if (typeof TerminalPanel !== "undefined") { TerminalPanel.show(); closeAllMenus(); }
+});
+document.getElementById("runWithNode")?.addEventListener("click", () => runCurrentFile("node"));
+document.getElementById("runWithPython")?.addEventListener("click", () => runCurrentFile("python"));
+document.getElementById("runWithDeno")?.addEventListener("click", () => runCurrentFile("deno run"));
+document.getElementById("stopProcess")?.addEventListener("click", () => {
+  window.electronAPI?.ptyWrite?.("\x03");  // Ctrl+C
+  closeAllMenus();
+});
+document.getElementById("openDebugConsole")?.addEventListener("click", () => {
+  if (typeof TerminalPanel !== "undefined") {
+    TerminalPanel.show();
+    const debugTab = document.querySelector('[data-tab="debug"]');
+    debugTab?.click();
+  }
   closeAllMenus();
 });
 
@@ -3438,6 +3741,11 @@ declare const global: typeof globalThis & Record<string, any>;
     accessibilitySupport: "off",
   });
 
+  // ── Register editor right-click context menu actions ────────
+  if (typeof window.registerEditorContextMenuActions === "function") {
+    window.registerEditorContextMenuActions(window.editor);
+  }
+
   // ── Register shortcuts inside Monaco ────────────────────────
   window.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () =>
     actions.saveFile(),
@@ -3563,6 +3871,12 @@ declare const global: typeof globalThis & Record<string, any>;
       fontSize: editorFontSize,
       wordWrap: wordWrapEnabled ? "on" : "off",
     });
+
+    // ── Load settings.json and apply (overrides hardcoded defaults above) ──
+    if (typeof SettingsJSON !== 'undefined') {
+      await SettingsJSON.load();
+    }
+
     updateZoomStatus();
     updateWrapStatus();
     updateStatusBar();

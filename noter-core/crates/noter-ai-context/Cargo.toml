@@ -9,7 +9,7 @@ serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
-noter-indexer   = { path = "../noter-indexer" }
+noter-core-api  = { path = "../noter-core-api" }
 noter-symboldb  = { path = "../noter-symboldb" }
 noter-graph     = { path = "../noter-graph" }
 noter-git       = { path = "../noter-git" }
