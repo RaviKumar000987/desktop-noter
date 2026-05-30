@@ -275,12 +275,11 @@ const CodeGraph = (() => {
       const sidebarHidden = sidebar?.classList.contains('hidden');
 
       if (isVisible && !sidebarHidden) {
-        // Collapse
-        sidebar?.classList.add('hidden');
-        $('resize-handle')?.classList.add('hidden');
+        // Collapse — use window.toggleSidebar so app.js sidebarVisible stays in sync
+        if (typeof window.toggleSidebar === 'function') window.toggleSidebar(false);
+        else { sidebar?.classList.add('hidden'); $('resize-handle')?.classList.add('hidden'); }
         $('ab-graph')?.classList.remove('ab-active');
         CodeGraph.hide();
-        window.sidebarVisible = false;
       } else {
         _showGraphPanel();
       }
@@ -290,14 +289,13 @@ const CodeGraph = (() => {
   function _showGraphPanel() {
     const sidebar = $('sidebar');
     // Hide other panels
-    ['explorer-content','no-folder-msg','search-panel','project-overview-panel'].forEach(id => {
+    ['explorer-content','no-folder-msg','search-panel','project-overview-panel','ai-chat-panel'].forEach(id => {
       const el = $(id);
       if (el) el.style.display = 'none';
     });
-    // Show sidebar
-    sidebar?.classList.remove('hidden');
-    $('resize-handle')?.classList.remove('hidden');
-    window.sidebarVisible = true;
+    // Show sidebar — use toggleSidebar so app.js sidebarVisible stays in sync
+    if (typeof window.toggleSidebar === 'function') window.toggleSidebar(true);
+    else { sidebar?.classList.remove('hidden'); $('resize-handle')?.classList.remove('hidden'); }
     // Title
     const title = sidebar?.querySelector('.sidebar-title');
     if (title) title.textContent = 'CODE GRAPH';
@@ -306,7 +304,6 @@ const CodeGraph = (() => {
     $('ab-graph')?.classList.add('ab-active');
 
     CodeGraph.show();
-    window.dispatchEvent(new CustomEvent('sidebar-shown'));
   }
 
   // Auto-build on workspace open

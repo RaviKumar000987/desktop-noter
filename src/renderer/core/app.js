@@ -319,6 +319,8 @@ const TabManager = {
     for (const id of ids) this.close(id, force);
   },
 };
+// Expose so dom-patcher.js (loaded before app.js) can reference it at event time
+window.TabManager = TabManager;
 
 // ═══════════════════════════════════════════════════════════════
 //  DRAG & DROP TAB REORDERING
@@ -420,6 +422,7 @@ const TabDnD = (() => {
 
   return { onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd };
 })();
+window.TabDnD = TabDnD; // expose for dom-patcher.js
 
 // ── Tab context menu ──────────────────────────────────────────
 function showTabContextMenu(tab, x, y) {
@@ -1110,6 +1113,8 @@ function toggleSidebar(force) {
   if (btn) btn.classList.toggle("active", sidebarVisible);
   saveSessionState();
 }
+// Expose so activity-bar.js (loaded after app.js) can sync sidebarVisible correctly.
+window.toggleSidebar = toggleSidebar;
 
 // Restore the correct explorer display based on whether a folder is open.
 // Called by activity-bar.js when switching back to explorer mode.
@@ -1136,9 +1141,10 @@ async function openExplorerFolder(folderPath) {
   }
 
   explorerState.rootPath = folderPath;
-  // Global accessor so Project Overview / Code Graph panels can read the open folder
-  // without needing to catch the workspace-opened event (handles already-open folder case)
   window.currentFolderPath = folderPath;
+
+  // Inform LSP bridge of the new workspace root so servers start in the right cwd
+  window.electronAPI?.lspSetWorkspace?.(folderPath).catch(() => {});
 
   document.getElementById("no-folder-msg").style.display = "none";
   const content = document.getElementById("explorer-content");
@@ -1588,6 +1594,7 @@ async function openFileByPath(fp) {
   TabManager.activate(tab.id);
   addToRecentFiles(fp);
   window.electronAPI?.watchFile?.(fp);
+  window.WorkspaceMemory?.recordFileOpen(fp, explorerState.rootPath);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2592,10 +2599,13 @@ async function openFolderAsWorkspace(folderPath) {
 }
 
 // ── Background workspace indexer (Rust) ──────────────────────────────────────
-const _NOTER_APPDATA = (window.electronAPI?.getAppDataPath?.() || "") + "/noter";
+// Resolved async — safe because _triggerWorkspaceIndex defers 2 s by design.
+let _NOTER_APPDATA = "";
+window.electronAPI?.getNoterDataDir?.()
+  .then(dir => { if (dir) _NOTER_APPDATA = dir; })
+  .catch(() => {});
 
 function _wsDbPath(folderPath) {
-  // Stable DB path per workspace — hash folder name
   const safe = folderPath.replace(/[^a-z0-9]/gi, "_").slice(-40);
   return `${_NOTER_APPDATA}/idx_${safe}.db`;
 }
@@ -2838,6 +2848,12 @@ const actions = {
     closeAllMenus();
   },
 };
+// Expose actions so command-palette.js and other modules can call them
+window.actions = actions;
+// Expose explorerState so command-palette.js / extensions can read rootPath
+window.explorerState = explorerState;
+// Alias showToast as window.toast so command-palette.js 'typeof toast' checks work
+window.toast = showToast;
 
 // ═══════════════════════════════════════════════════════════════
 //  EVENT LISTENERS (menus + buttons)
@@ -2966,29 +2982,46 @@ document.getElementById("documentation").addEventListener("click", () => {
 document.getElementById("shortcuts").addEventListener("click", () => {
   alert(
     "Keyboard Shortcuts\n\n" +
-      "Ctrl + N          →  New File / Tab\n" +
-      "Ctrl + T          →  New Tab\n" +
-      "Ctrl + W          →  Close Tab\n" +
-      "Ctrl + O          →  Open File\n" +
-      "Ctrl + S          →  Save\n" +
-      "Ctrl + Shift + S  →  Save As\n" +
-      "Ctrl + B          →  Toggle Explorer\n" +
-      "─────────────────────────────────────\n" +
-      "Ctrl + Z          →  Undo\n" +
-      "Ctrl + Y          →  Redo\n" +
-      "Ctrl + X          →  Cut\n" +
-      "Ctrl + C          →  Copy\n" +
-      "Ctrl + V          →  Paste\n" +
-      "Ctrl + A          →  Select All\n" +
-      "Ctrl + D          →  Duplicate Line\n" +
-      "─────────────────────────────────────\n" +
-      "Ctrl + F          →  Find\n" +
-      "Ctrl + H          →  Find & Replace\n" +
-      "─────────────────────────────────────\n" +
-      "Ctrl + +          →  Zoom In\n" +
-      "Ctrl + -          →  Zoom Out\n" +
-      "Ctrl + 0          →  Reset Zoom\n" +
-      "Esc               →  Close Menu",
+      "── File ─────────────────────────────────\n" +
+      "Ctrl+N / Ctrl+T   →  New Tab\n" +
+      "Ctrl+W            →  Close Tab\n" +
+      "Ctrl+O            →  Open File\n" +
+      "Ctrl+S            →  Save\n" +
+      "Ctrl+Shift+S      →  Save As\n" +
+      "Ctrl+P            →  Quick Open (Go to File)\n" +
+      "── Edit ─────────────────────────────────\n" +
+      "Ctrl+Z            →  Undo\n" +
+      "Ctrl+Y            →  Redo\n" +
+      "Ctrl+X/C/V        →  Cut / Copy / Paste\n" +
+      "Ctrl+A            →  Select All\n" +
+      "Ctrl+D            →  Duplicate Line\n" +
+      "Ctrl+/            →  Toggle Line Comment\n" +
+      "Shift+Alt+F       →  Format Document\n" +
+      "F2                →  Rename Symbol\n" +
+      "Ctrl+. (dot)      →  Quick Fix\n" +
+      "── View ─────────────────────────────────\n" +
+      "Ctrl+B            →  Toggle Explorer\n" +
+      "Ctrl+`            →  Toggle Terminal\n" +
+      "Ctrl+\\            →  Split Editor\n" +
+      "Ctrl+Shift+F      →  Global Search\n" +
+      "Ctrl+Shift+P      →  Command Palette\n" +
+      "Ctrl+Shift+X      →  Extension Marketplace\n" +
+      "Ctrl+,            →  Open Settings (JSON)\n" +
+      "Alt+Z             →  Zen Mode\n" +
+      "Ctrl++ / Ctrl+-   →  Zoom In / Out\n" +
+      "Ctrl+0            →  Reset Zoom\n" +
+      "── Navigation ───────────────────────────\n" +
+      "F12               →  Go to Definition\n" +
+      "Shift+F12         →  Go to References\n" +
+      "Ctrl+F12          →  Go to Implementation\n" +
+      "Ctrl+G            →  Go to Line\n" +
+      "Ctrl+Shift+O      →  Go to Symbol\n" +
+      "Ctrl+Tab          →  Next Tab\n" +
+      "Ctrl+Shift+Tab    →  Previous Tab\n" +
+      "F8 / Shift+F8     →  Next / Previous Problem\n" +
+      "── Run ──────────────────────────────────\n" +
+      "F5                →  Run File\n" +
+      "Shift+F5          →  Stop Process (Ctrl+C)\n"
   );
   closeAllMenus();
 });
@@ -3156,8 +3189,9 @@ document.getElementById("toggleBreadcrumbMenu")?.addEventListener("click", () =>
 });
 document.getElementById("toggleLineNumbersMenu")?.addEventListener("click", () => {
   if (!window.editor) return;
+  // getOption returns RenderLineNumbersType enum: 1 = on, 0 = off
   const cur = window.editor.getOption(monaco.editor.EditorOption.lineNumbers);
-  window.editor.updateOptions({ lineNumbers: cur === "on" ? "off" : "on" });
+  window.editor.updateOptions({ lineNumbers: cur !== 0 ? "off" : "on" });
   closeAllMenus();
 });
 
@@ -3241,7 +3275,7 @@ document.getElementById("gitRevertFile")?.addEventListener("click", () =>
   gitToast("Git: Revert File — coming in Phase 3"));
 
 // ── Run menu ────────────────────────────────────────────────────
-function runCurrentFile(runtime) {
+async function runCurrentFile(runtime) {
   closeAllMenus();
   if (!window.editor) return showToast("No file open", "error");
   const tab = TabManager.getActive?.();
@@ -3261,9 +3295,21 @@ function runCurrentFile(runtime) {
   }
 
   if (typeof TerminalPanel !== "undefined") TerminalPanel.show();
-  setTimeout(() => window.electronAPI?.ptyCreate?.({ shell: "cmd.exe" })
-    .then(() => window.electronAPI?.ptyWrite?.(`${cmd}\r`))
-    .catch(() => {}), 200);
+
+  // Try to reuse the existing PTY session; only create a new one if there is none.
+  const _sendCmd = () => window.electronAPI?.ptyWrite?.(`${cmd}\r`);
+  const ptyStat = typeof TerminalPanel !== "undefined" && TerminalPanel.isRunning?.();
+  if (ptyStat) {
+    // Existing PTY is alive — just send the command
+    setTimeout(_sendCmd, 100);
+  } else {
+    // No PTY yet — create one using the configured shell (not cmd.exe)
+    const cwd = explorerState.rootPath || undefined;
+    try {
+      await window.electronAPI?.ptyCreate?.({ cwd });
+      setTimeout(_sendCmd, 300);
+    } catch { /* ignore */ }
+  }
 }
 
 document.getElementById("runFile")?.addEventListener("click", () => runCurrentFile("auto"));
@@ -3285,6 +3331,57 @@ document.getElementById("openDebugConsole")?.addEventListener("click", () => {
   }
   closeAllMenus();
 });
+
+// ── Remove Folder from Workspace ────────────────────────────────
+function removeFromWorkspace() {
+  if (!explorerState.rootPath) return;
+
+  const root = explorerState.rootPath;
+  const sep  = root.includes("\\") ? "\\" : "/";
+
+  // Close all tabs whose file lives inside this workspace
+  TabManager._suppressAutoBlank = true;
+  const toClose = TabManager.tabs.filter(
+    t => t.filePath && t.filePath.startsWith(root + sep)
+  ).map(t => t.id);
+  toClose.forEach(id => TabManager.close(id, true));
+  TabManager._suppressAutoBlank = false;
+
+  // Stop watchers
+  window.electronAPI?.unwatchWorkspace?.(root);
+
+  // Reset explorer state
+  explorerState.rootPath = null;
+  explorerState.expandedPaths = new Set();
+  window.currentFolderPath = null;
+
+  const noFolder  = document.getElementById("no-folder-msg");
+  const expContent = document.getElementById("explorer-content");
+  const tree       = document.getElementById("explorer-tree");
+  const folderName = document.getElementById("folder-name");
+  if (noFolder)   noFolder.style.display   = "";
+  if (expContent) expContent.style.display = "none";
+  if (tree)       tree.innerHTML           = "";
+  if (folderName) folderName.textContent   = "";
+  if (typeof VirtualExplorer !== "undefined") VirtualExplorer.setTree([]);
+
+  // Deactivate workspace tracking
+  WorkspaceManager.deactivate();
+
+  clearInterval(_gitBranchTimer);
+  _gitBranchTimer = null;
+  const gitEl = document.getElementById("git-branch");
+  if (gitEl) gitEl.textContent = "";
+
+  // Ensure at least one blank tab remains
+  if (TabManager.tabs.length === 0) {
+    const t = TabManager.create();
+    TabManager.activate(t.id);
+  }
+
+  saveSessionState();
+  showToast("Folder removed from workspace", "info");
+}
 
 // ── Window controls ─────────────────────────────────────────────
 document
@@ -3312,9 +3409,7 @@ document
   .addEventListener("click", () => refreshExplorer());
 document
   .getElementById("remove-from-workspace-btn")
-  .addEventListener("click", () => {
-    if (typeof removeFromWorkspace === "function") removeFromWorkspace();
-  });
+  .addEventListener("click", () => removeFromWorkspace());
 
 // ── New tab "+" button ──────────────────────────────────────────
 document.getElementById("new-tab-btn").addEventListener("click", () => {

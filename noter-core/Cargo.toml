@@ -22,6 +22,8 @@ members = [
     "crates/noter-watch-engine",
     "crates/noter-code-graph",
     "crates/noter-symbol-intelligence",
+    "crates/noter-reasoning-engine",
+    "crates/noter-memory-engine",
 ]
 
 [workspace.package]

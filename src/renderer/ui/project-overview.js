@@ -104,6 +104,7 @@ const ProjectOverview = (() => {
       }
 
       _lastScan = result;
+      window.lastProjectScan = result; // shared with ai-chat.js for project context
       renderScan(result);
     } catch (err) {
       _scanning = false;

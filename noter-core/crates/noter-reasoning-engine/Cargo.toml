@@ -1,0 +1,15 @@
+[package]
+name = "noter-reasoning-engine"
+description = "Phase 2.3 — Project Reasoning: risk scoring, health computation, debt detection, recommendations"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace    = true
+serde.workspace     = true
+serde_json.workspace = true
+tracing.workspace   = true
+walkdir.workspace   = true
+regex.workspace     = true
+once_cell.workspace = true
+noter-code-graph    = { path = "../noter-code-graph" }

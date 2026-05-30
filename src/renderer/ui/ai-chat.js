@@ -206,6 +206,7 @@ const AiChat = (() => {
     const symbolDb   = root ? root + '/.noter/symbols.db' : '';
     const projectInfo = getProjectInfo();
 
+    window.WorkspaceMemory?.recordAiQuery(query, root);
     try {
       await window.noter?.ai?.query({
         workspaceRoot: root,

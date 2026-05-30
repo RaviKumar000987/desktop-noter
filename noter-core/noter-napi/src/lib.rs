@@ -9,8 +9,9 @@ mod watch;
 mod graph;
 mod symbols_intel;
 mod ai_context;
+mod reasoning;
+mod memory;
 
-// Re-export all #[napi] functions — napi-derive picks them up automatically
 pub use search::*;
 pub use git::*;
 pub use symbols::*;
@@ -20,3 +21,5 @@ pub use watch::*;
 pub use graph::*;
 pub use symbols_intel::*;
 pub use ai_context::*;
+pub use reasoning::*;
+pub use memory::*;

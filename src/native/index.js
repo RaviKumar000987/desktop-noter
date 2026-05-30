@@ -13,222 +13,126 @@ function load() {
   return native;
 }
 
-/**
- * Search files in workspace — replaces search.worker.js
- * @param {string} root
- * @param {string} pattern
- * @param {boolean} caseSensitive
- * @returns {Array<{file,line,column,text,matchStart,matchEnd}>}
- */
-function searchWorkspace(root, pattern, caseSensitive = false) {
+// Generic safe call helper
+function _call(fn, ...args) {
   const n = load();
-  if (!n) return [];
-  return n.searchWorkspace(root, pattern, caseSensitive);
+  if (!n || typeof n[fn] !== 'function') return null;
+  try { return n[fn](...args); }
+  catch (e) { console.warn(`[noter-native] ${fn}:`, e.message); return null; }
 }
+function _callArr(fn, ...args) { return _call(fn, ...args) || []; }
+function _callBool(fn, ...args) { return _call(fn, ...args) || false; }
 
-/**
- * Get git status for a repo path
- * @param {string} repoPath
- * @returns {{branch, ahead, behind, files: Array<{path, status}>} | null}
- */
-function gitStatus(repoPath) {
-  const n = load();
-  if (!n) return null;
-  try {
-    return n.gitStatus(repoPath);
-  } catch {
-    return null;
-  }
+// ── Phase 1: Search ───────────────────────────────────────────────────────────
+function searchWorkspace(root, pattern, cs = false) { return _callArr('searchWorkspace', root, pattern, cs); }
+function indexWorkspace(root, dbPath)               { return _call('indexWorkspace', root, dbPath) || 0; }
+function searchSymbols(dbPath, query)               { return _callArr('searchSymbols', dbPath, query); }
+
+// ── Phase 1: Git ──────────────────────────────────────────────────────────────
+function gitStatus(repoPath)                        { return _call('gitStatus', repoPath); }
+function gitDiff(repoPath, filePath = null)         { return _call('gitDiff', repoPath, filePath) || { files: [] }; }
+function gitLog(repoPath, maxCount = 50, fp = null) { return _callArr('gitLog', repoPath, maxCount, fp); }
+function gitBranches(repoPath)                      { return _callArr('gitBranches', repoPath); }
+
+// ── Phase 1: Cache ────────────────────────────────────────────────────────────
+function cacheSet(dbPath, ns, key, value) {
+  const n = load(); if (!n) return;
+  try { n.cacheSet(dbPath, ns, key, JSON.stringify(value)); } catch {}
 }
-
-/**
- * Index all files in workspace and write to SQLite DB
- * @param {string} root
- * @param {string} dbPath
- * @returns {number} symbols indexed
- */
-function indexWorkspace(root, dbPath) {
-  const n = load();
-  if (!n) return 0;
-  return n.indexWorkspace(root, dbPath);
-}
-
-/**
- * Search symbols by name — used for Ctrl+P / Go-to-Symbol
- * @param {string} dbPath
- * @param {string} query
- * @returns {Array<{name,kind,file,line,column,container}>}
- */
-function searchSymbols(dbPath, query) {
-  const n = load();
-  if (!n) return [];
-  return n.searchSymbols(dbPath, query);
-}
-
-/**
- * Persistent cache set
- */
-function cacheSet(dbPath, namespace, key, value) {
-  const n = load();
-  if (!n) return;
-  n.cacheSet(dbPath, namespace, key, JSON.stringify(value));
-}
-
-/**
- * Persistent cache get
- */
-function cacheGet(dbPath, namespace, key) {
-  const n = load();
-  if (!n) return null;
-  const raw = n.cacheGet(dbPath, namespace, key);
+function cacheGet(dbPath, ns, key) {
+  const raw = _call('cacheGet', dbPath, ns, key);
   return raw ? JSON.parse(raw) : null;
 }
 
-// ── Project Intelligence (Phase 1.5) ─────────────────────────────────────────
+// ── Phase 1.5: Project Intelligence ──────────────────────────────────────────
+function scanProjectWorkspace(root)  { return _call('scanProjectWorkspace', root); }
+function invalidateProjectCache(root){ _call('invalidateProjectCache', root); }
 
-/**
- * Scan a workspace and return full project intelligence (language, framework,
- * dependency, architecture, project map). Results are cached by manifest hash.
- * @param {string} root  Absolute workspace root path
- * @returns {object|null}  JsProjectInfo or null if Rust core unavailable
- */
-function scanProjectWorkspace(root) {
-  const n = load();
-  if (!n || typeof n.scanProjectWorkspace !== 'function') return null;
-  try {
-    return n.scanProjectWorkspace(root);
-  } catch (e) {
-    console.warn('[noter-native] scanProjectWorkspace error:', e.message);
-    return null;
-  }
-}
+// ── Phase 1.75: Watch Engine ──────────────────────────────────────────────────
+function startWorkspaceWatch(root)   { return _callBool('startWorkspaceWatch', root); }
+function stopWorkspaceWatch(root)    { return _callBool('stopWorkspaceWatch', root); }
+function pollWatchEvents(root)       { return _callArr('pollWatchEvents', root); }
+function requestFileReindex(r, p)    { return _callBool('requestFileReindex', r, p); }
+function getWatchStats(root)         { return _call('getWatchStats', root); }
 
-/**
- * Force-invalidate cached project scan for a workspace root.
- * @param {string} root
- */
-function invalidateProjectCache(root) {
-  const n = load();
-  if (!n || typeof n.invalidateProjectCache !== 'function') return;
-  try {
-    n.invalidateProjectCache(root);
-  } catch {}
-}
+// ── Phase 2: Code Graph ───────────────────────────────────────────────────────
+function buildCodeGraph(root)            { return _call('buildCodeGraph', root); }
+function updateGraphFile(root, file)     { return _call('updateGraphFile', root, file); }
+function invalidateCodeGraph(root)       { _call('invalidateCodeGraph', root); }
+function getGraphStats(root)             { return _call('getGraphStats', root); }
+function queryGraphNode(root, name)      { return _callArr('queryGraphNode', root, name); }
+function getFileImports(root, file)      { return _callArr('getFileImports', root, file); }
+function getFileImporters(root, file)    { return _callArr('getFileImporters', root, file); }
+function analyzeImpact(root, file)       { return _call('analyzeImpact', root, file); }
+function findDeadCode(root)              { return _callArr('findDeadCode', root); }
+function findDependencyCycles(root)      { return _callArr('findDependencyCycles', root); }
+function checkArchViolations(root, pat)  { return _callArr('checkArchViolations', root, pat); }
+function findImportPath(root, from, to)  { return _call('findImportPath', root, from, to); }
 
-// ── AI Context Engine (Phase 2.2) ────────────────────────────────────────────
+// ── Phase 2.1: Symbol Intelligence ───────────────────────────────────────────
+function buildSymbolCallGraph(r, sDb, cDb)     { return _call('buildSymbolCallGraph', r, sDb, cDb); }
+function hydrateSymbolGraph(r, cDb)            { return _call('hydrateSymbolGraph', r, cDb); }
+function updateSymbolFile(r, fp, sDb, cDb)     { return _call('updateSymbolFile', r, fp, sDb, cDb); }
+function findSymbolCallers(r, id, sDb)         { return _callArr('findSymbolCallers', r, id, sDb); }
+function findSymbolCallees(r, id, sDb)         { return _callArr('findSymbolCallees', r, id, sDb); }
+function findSymbolImplementations(r, n, sDb)  { return _callArr('findSymbolImplementations', r, n, sDb); }
+function traceExecutionFlow(r, id, d, sDb)     { return _call('traceExecutionFlow', r, id, d, sDb); }
+function getSymbolImpact(r, id, sDb)           { return _call('getSymbolImpact', r, id, sDb); }
 
-function _aiCall(fn, ...args) {
-  const n = load();
-  if (!n || typeof n[fn] !== 'function') return null;
-  try { return n[fn](...args); } catch (e) { console.warn(`[noter-native] ${fn}:`, e.message); return null; }
-}
+// ── Phase 2.2: AI Context ─────────────────────────────────────────────────────
+function buildAiContext(r, q, sDb, proj)       { return _call('buildAiContext', r, q, sDb, proj); }
+function buildAiPrompt(r, q, sDb, proj, model) { return _call('buildAiPrompt', r, q, sDb, proj, model); }
+function invalidateAiContext(root)             { _call('invalidateAiContext', root); }
 
-function buildAiContext(root, query, symbolDb, project) { return _aiCall('buildAiContext', root, query, symbolDb, project); }
-function buildAiPrompt(root, query, symbolDb, project, model) { return _aiCall('buildAiPrompt', root, query, symbolDb, project, model); }
-function invalidateAiContext(root) { return _aiCall('invalidateAiContext', root); }
+// ── Phase 2.3: Reasoning Engine ───────────────────────────────────────────────
+function analyzeProject(root)       { return _call('analyzeProject', root); }
+function getProjectRisk(root)       { return _callArr('getProjectRisk', root); }
+function getProjectDebt(root)       { return _call('getProjectDebt', root); }
+function invalidateReasoning(root)  { _call('invalidateReasoning', root); }
 
-// ── Symbol Intelligence Engine (Phase 2.1) ────────────────────────────────────
+// ── Phase 2.5: Memory Engine ──────────────────────────────────────────────────
+function memoryBumpSession(db, ws)                      { return _call('memoryBumpSession', db, ws); }
+function memoryGetSession(db, ws)                       { return _call('memoryGetSession', db, ws); }
+function memoryRecordFileOpen(db, ws, fp)               { _call('memoryRecordFileOpen', db, ws, fp); }
+function memoryGetFileHistory(db, ws, limit)            { return _callArr('memoryGetFileHistory', db, ws, limit); }
+function memoryRecordAiQuery(db, ws, query)             { _call('memoryRecordAiQuery', db, ws, query); }
+function memoryGetAiQueries(db, ws, limit)              { return _callArr('memoryGetAiQueries', db, ws, limit); }
+function memoryGetPatterns(db, ws)                      { return _call('memoryGetPatterns', db, ws); }
+function memoryUpdatePatterns(db, ws, n, fw, arch, lang){ _call('memoryUpdatePatterns', db, ws, n, fw, arch, lang); }
+function memoryDetectNaming(db, ws)                     { return _call('memoryDetectNaming', db, ws); }
+function memoryGetContext(db, ws)                       { return _call('memoryGetContext', db, ws); }
+function memoryGetInsights(db, ws)                      { return _callArr('memoryGetInsights', db, ws); }
+function memoryGetWelcome(db, ws)                       { return _call('memoryGetWelcome', db, ws); }
+function memoryClearWorkspace(db, ws)                   { _call('memoryClearWorkspace', db, ws); }
 
-function _symCall(fn, ...args) {
-  const n = load();
-  if (!n || typeof n[fn] !== 'function') return null;
-  try { return n[fn](...args); } catch (e) { console.warn(`[noter-native] ${fn}:`, e.message); return null; }
-}
-
-function buildSymbolCallGraph(root, symbolDbPath, callDbPath) { return _symCall('buildSymbolCallGraph', root, symbolDbPath, callDbPath); }
-function hydrateSymbolGraph(root, callDbPath)               { return _symCall('hydrateSymbolGraph', root, callDbPath); }
-function updateSymbolFile(root, filePath, symbolDb, callDb) { return _symCall('updateSymbolFile', root, filePath, symbolDb, callDb); }
-function findSymbolCallers(root, symbolId, symbolDb)        { return _symCall('findSymbolCallers', root, symbolId, symbolDb) || []; }
-function findSymbolCallees(root, symbolId, symbolDb)        { return _symCall('findSymbolCallees', root, symbolId, symbolDb) || []; }
-function findSymbolImplementations(root, ifaceName, symbolDb) { return _symCall('findSymbolImplementations', root, ifaceName, symbolDb) || []; }
-function traceExecutionFlow(root, startId, maxDepth, symbolDb) { return _symCall('traceExecutionFlow', root, startId, maxDepth, symbolDb); }
-function getSymbolImpact(root, symbolId, symbolDb)          { return _symCall('getSymbolImpact', root, symbolId, symbolDb); }
-
-// ── Code Graph Engine (Phase 2) ───────────────────────────────────────────────
-
-function _graphCall(fn, ...args) {
-  const n = load();
-  if (!n || typeof n[fn] !== 'function') return null;
-  try { return n[fn](...args); } catch (e) { console.warn(`[noter-native] ${fn}:`, e.message); return null; }
-}
-
-function buildCodeGraph(root)                   { return _graphCall('buildCodeGraph', root); }
-function updateGraphFile(root, file)            { return _graphCall('updateGraphFile', root, file); }
-function invalidateCodeGraph(root)              { return _graphCall('invalidateCodeGraph', root); }
-function getGraphStats(root)                    { return _graphCall('getGraphStats', root); }
-function queryGraphNode(root, name)             { return _graphCall('queryGraphNode', root, name) || []; }
-function getFileImports(root, file)             { return _graphCall('getFileImports', root, file) || []; }
-function getFileImporters(root, file)           { return _graphCall('getFileImporters', root, file) || []; }
-function analyzeImpact(root, file)              { return _graphCall('analyzeImpact', root, file); }
-function findDeadCode(root)                     { return _graphCall('findDeadCode', root) || []; }
-function findDependencyCycles(root)             { return _graphCall('findDependencyCycles', root) || []; }
-function checkArchViolations(root, pattern)     { return _graphCall('checkArchViolations', root, pattern) || []; }
-function findImportPath(root, from, to)         { return _graphCall('findImportPath', root, from, to); }
-
-// ── Incremental Watch Engine (Phase 1.75) ─────────────────────────────────────
-
-function startWorkspaceWatch(root) {
-  const n = load();
-  if (!n || typeof n.startWorkspaceWatch !== 'function') return false;
-  try { return n.startWorkspaceWatch(root); } catch (e) { console.warn('[noter-native] startWorkspaceWatch:', e.message); return false; }
-}
-
-function stopWorkspaceWatch(root) {
-  const n = load();
-  if (!n || typeof n.stopWorkspaceWatch !== 'function') return false;
-  try { return n.stopWorkspaceWatch(root); } catch (e) { return false; }
-}
-
-function pollWatchEvents(root) {
-  const n = load();
-  if (!n || typeof n.pollWatchEvents !== 'function') return [];
-  try { return n.pollWatchEvents(root) || []; } catch { return []; }
-}
-
-function requestFileReindex(root, path) {
-  const n = load();
-  if (!n || typeof n.requestFileReindex !== 'function') return false;
-  try { return n.requestFileReindex(root, path); } catch { return false; }
-}
-
-function getWatchStats(root) {
-  const n = load();
-  if (!n || typeof n.getWatchStats !== 'function') return null;
-  try { return n.getWatchStats(root); } catch { return null; }
-}
-
-/** Check if Rust native core loaded successfully */
-function isAvailable() {
-  return load() !== null;
-}
+function isAvailable() { return load() !== null; }
 
 module.exports = {
   isAvailable,
-  buildAiContext,
-  buildAiPrompt,
-  invalidateAiContext,
-  buildSymbolCallGraph,
-  hydrateSymbolGraph,
-  updateSymbolFile,
-  findSymbolCallers,
-  findSymbolCallees,
-  findSymbolImplementations,
-  traceExecutionFlow,
-  getSymbolImpact,
+  // Search
+  searchWorkspace, indexWorkspace, searchSymbols,
+  // Git (full — status + diff + log + branches)
+  gitStatus, gitDiff, gitLog, gitBranches,
+  // Cache
+  cacheSet, cacheGet,
+  // Project
+  scanProjectWorkspace, invalidateProjectCache,
+  // Watch
+  startWorkspaceWatch, stopWorkspaceWatch, pollWatchEvents, requestFileReindex, getWatchStats,
+  // Code Graph
   buildCodeGraph, updateGraphFile, invalidateCodeGraph, getGraphStats,
   queryGraphNode, getFileImports, getFileImporters, analyzeImpact,
   findDeadCode, findDependencyCycles, checkArchViolations, findImportPath,
-  searchWorkspace,
-  gitStatus,
-  indexWorkspace,
-  searchSymbols,
-  cacheSet,
-  cacheGet,
-  scanProjectWorkspace,
-  invalidateProjectCache,
-  startWorkspaceWatch,
-  stopWorkspaceWatch,
-  pollWatchEvents,
-  requestFileReindex,
-  getWatchStats,
+  // Symbol Intelligence
+  buildSymbolCallGraph, hydrateSymbolGraph, updateSymbolFile,
+  findSymbolCallers, findSymbolCallees, findSymbolImplementations,
+  traceExecutionFlow, getSymbolImpact,
+  // AI Context
+  buildAiContext, buildAiPrompt, invalidateAiContext,
+  // Reasoning Engine (Phase 2.3 — Rust)
+  analyzeProject, getProjectRisk, getProjectDebt, invalidateReasoning,
+  // Memory Engine (Phase 2.5 — Rust SQLite)
+  memoryBumpSession, memoryGetSession, memoryRecordFileOpen, memoryGetFileHistory,
+  memoryRecordAiQuery, memoryGetAiQueries, memoryGetPatterns, memoryUpdatePatterns,
+  memoryDetectNaming, memoryGetContext, memoryGetInsights, memoryGetWelcome, memoryClearWorkspace,
 };

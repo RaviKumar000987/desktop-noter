@@ -189,3 +189,4 @@ const GlobalSearch = (() => {
 
   return { show, hide, toggle };
 })();
+window.GlobalSearch = GlobalSearch;

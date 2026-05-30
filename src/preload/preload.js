@@ -90,10 +90,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // ── Read file content (IntelliSense workspace indexer) ──────────
   readFileContent: (filePath) => ipcRenderer.invoke("read-file-content", filePath),
 
+  // ── App data directory (for Rust DB path construction) ───────────
+  getNoterDataDir:  ()      => ipcRenderer.invoke("get-noter-data-dir"),
+
   // ── Performance diagnostics ──────────────────────────────────────
   getProcessMemory: ()      => ipcRenderer.invoke("get-process-memory"),
   readGitignore:    (dir)   => ipcRenderer.invoke("read-gitignore", dir),
   reloadWindow:     ()      => ipcRenderer.invoke("reload-window"),
+
+  // ── Health push (main process pushes memory stats, renderer subscribes) ──
+  healthOpen:    ()   => ipcRenderer.send("noter:health:open"),
+  healthClose:   ()   => ipcRenderer.send("noter:health:close"),
+  onHealthPush:  (cb) => ipcRenderer.on("noter:health:push", (_e, d) => cb(d)),
+  offHealthPush: ()   => ipcRenderer.removeAllListeners("noter:health:push"),
 
   // ── Crash recovery (file-system level backup) ──────────────────
   crashBackupRead:  ()      => ipcRenderer.invoke("crash-backup-read"),
@@ -101,6 +110,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   crashBackupClear: ()      => ipcRenderer.invoke("crash-backup-clear"),
 
   // ── Language Server Protocol (LSP) bridge ────────────────────
+  lspSetWorkspace: (root)                    => ipcRenderer.invoke("lsp:set-workspace", root),
   lspStart:    (serverId)                    => ipcRenderer.invoke("lsp:start", serverId),
   lspStop:     (serverId)                    => ipcRenderer.invoke("lsp:stop", serverId),
   lspRequest:  (serverId, method, params)    => ipcRenderer.invoke("lsp:request", { serverId, method, params }),
@@ -150,12 +160,13 @@ contextBridge.exposeInMainWorld("noter", {
 
   // ── LSP — Language server lifecycle & protocol ──────────────────────────
   lsp: {
-    start:   (req)                   => ipcRenderer.invoke("noter:lsp:start",    req),
-    stop:    (req)                   => ipcRenderer.invoke("noter:lsp:stop",     req),
-    request: (serverId, method, p)   => ipcRenderer.invoke("noter:lsp:request",  { serverId, method, params: p }),
-    notify:  (serverId, method, p)   => ipcRenderer.send(  "noter:lsp:notify",   { serverId, method, params: p }),
-    status:  ()                      => ipcRenderer.invoke("noter:lsp:status"),
-    detect:  ()                      => ipcRenderer.invoke("noter:lsp:detect"),
+    start:        (req)                  => ipcRenderer.invoke("noter:lsp:start",         req),
+    stop:         (req)                  => ipcRenderer.invoke("noter:lsp:stop",          req),
+    request:      (serverId, method, p)  => ipcRenderer.invoke("noter:lsp:request",       { serverId, method, params: p }),
+    notify:       (serverId, method, p)  => ipcRenderer.send(  "noter:lsp:notify",        { serverId, method, params: p }),
+    status:       ()                     => ipcRenderer.invoke("noter:lsp:status"),
+    detect:       ()                     => ipcRenderer.invoke("noter:lsp:detect"),
+    setWorkspace: (root)                 => ipcRenderer.invoke("noter:lsp:set-workspace", root),
 
     onMessage:      (cb) => ipcRenderer.on("noter:lsp:message",        (_e, d) => cb(d)),
     onServerStatus: (cb) => ipcRenderer.on("noter:lsp:server-status",  (_e, d) => cb(d)),
@@ -207,20 +218,6 @@ contextBridge.exposeInMainWorld("noter", {
     diff:     (req) => ipcRenderer.invoke("noter:git:diff",     req),
     log:      (req) => ipcRenderer.invoke("noter:git:log",      req),
     branches: (req) => ipcRenderer.invoke("noter:git:branches", req),
-  },
-
-  // ── Graph — code / dependency graph (Phase 2) ──────────────────────────
-  graph: {
-    referencesTo:   (req) => ipcRenderer.invoke("noter:graph:refs-to",   req),
-    referencesFrom: (req) => ipcRenderer.invoke("noter:graph:refs-from", req),
-    impact:         (req) => ipcRenderer.invoke("noter:graph:impact",    req),
-  },
-
-  // ── AI — context engine (Phase 2) ──────────────────────────────────────
-  ai: {
-    context:    (req) => ipcRenderer.invoke("noter:ai:context",    req),
-    embeddings: (req) => ipcRenderer.invoke("noter:ai:embeddings", req),
-    query:      (req) => ipcRenderer.invoke("noter:ai:query",      req),
   },
 
   // ── Workspace — project intelligence (Phase 1.5) ───────────────────────
@@ -310,5 +307,36 @@ contextBridge.exposeInMainWorld("noter", {
     onScanError:    (cb) => ipcRenderer.on("noter:project:scan-error",    (_e, d) => cb(d)),
     offScanComplete: ()  => ipcRenderer.removeAllListeners("noter:project:scan-complete"),
     offScanError:    ()  => ipcRenderer.removeAllListeners("noter:project:scan-error"),
+  },
+
+  // ── Memory — Workspace Memory Engine (Phase 2.5) ──────────────────────────
+  // JS workspace-memory.js handles everything via localStorage for MVP.
+  // These IPC methods are reserved for the noter-memory-engine Rust crate.
+  // ── Memory — Rust SQLite-backed workspace memory (Phase 2.5) ─────────────
+  memory: {
+    bumpSession:    (req) => ipcRenderer.invoke("noter:memory:bump-session",    req),
+    getSession:     (req) => ipcRenderer.invoke("noter:memory:session",         req),
+    recordFile:     (req) => ipcRenderer.invoke("noter:memory:record-file",     req),
+    getFileHistory: (req) => ipcRenderer.invoke("noter:memory:file-history",    req),
+    recordQuery:    (req) => ipcRenderer.invoke("noter:memory:record-query",    req),
+    getQueries:     (req) => ipcRenderer.invoke("noter:memory:queries",         req),
+    getPatterns:    (req) => ipcRenderer.invoke("noter:memory:patterns",        req),
+    updatePatterns: (req) => ipcRenderer.invoke("noter:memory:update-patterns", req),
+    detectNaming:   (req) => ipcRenderer.invoke("noter:memory:detect-naming",   req),
+    getContext:     (req) => ipcRenderer.invoke("noter:memory:context",         req),
+    getInsights:    (req) => ipcRenderer.invoke("noter:memory:insights",        req),
+    getWelcome:     (req) => ipcRenderer.invoke("noter:memory:welcome",         req),
+    clear:          (req) => ipcRenderer.invoke("noter:memory:clear",           req),
+    recordEvent:    (req) => ipcRenderer.invoke("noter:memory:record",          req),
+  },
+
+  // ── Reasoning — Rust reasoning engine (Phase 2.3) ─────────────────────────
+  reasoning: {
+    getHealth:      (req) => ipcRenderer.invoke("noter:reasoning:health",    req),
+    getRisk:        (req) => ipcRenderer.invoke("noter:reasoning:risk",      req),
+    getDebt:        (req) => ipcRenderer.invoke("noter:reasoning:debt",      req),
+    getAdvice:      (req) => ipcRenderer.invoke("noter:reasoning:advice",    req),
+    simulateChange: (req) => ipcRenderer.invoke("noter:reasoning:simulate",  req),
+    invalidate:     (req) => ipcRenderer.invoke("noter:reasoning:invalidate",req),
   },
 });

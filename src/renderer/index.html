@@ -314,6 +314,38 @@
               <rect x="13" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".35"/>
             </svg>
           </button>
+          <!-- Health Dashboard — Phase 2.25 -->
+          <button class="ab-btn" id="ab-health" title="System Health" aria-label="System Health">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 12h4l3-8 4 16 3-8h4" stroke="currentColor" stroke-width="1.8"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <!-- Workspace Memory — Phase 2.5 -->
+          <button class="ab-btn" id="ab-memory" title="Workspace Memory" aria-label="Workspace Memory">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="12" cy="8" rx="7" ry="6" fill="currentColor" opacity=".8"/>
+              <path d="M8 8c0-2.2 1.8-4 4-4" stroke="var(--np-canvas,#111318)" stroke-width="1.2" stroke-linecap="round"/>
+              <circle cx="10" cy="7.5" r="1" fill="var(--np-canvas,#111318)" opacity=".7"/>
+              <circle cx="14" cy="7.5" r="1" fill="var(--np-canvas,#111318)" opacity=".7"/>
+              <path d="M9 10q3 2 6 0" stroke="var(--np-canvas,#111318)" stroke-width="1" stroke-linecap="round"/>
+              <rect x="9" y="14" width="6" height="1.4" rx=".7" fill="currentColor" opacity=".55"/>
+              <rect x="9.5" y="16.4" width="5" height="1.4" rx=".7" fill="currentColor" opacity=".35"/>
+              <path d="M7 19h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".4"/>
+            </svg>
+          </button>
+          <!-- Project Reasoning — Phase 2.3 -->
+          <button class="ab-btn" id="ab-reasoning" title="Project Reasoning" aria-label="Project Reasoning">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C8.5 2 5.5 4.5 5.5 8c0 2 .9 3.8 2.3 5L7 15h10l-.8-2c1.4-1.2 2.3-3 2.3-5C18.5 4.5 15.5 2 12 2z"
+                    fill="currentColor" opacity=".85"/>
+              <rect x="9" y="15" width="6" height="1.5" rx=".75" fill="currentColor" opacity=".6"/>
+              <rect x="9.5" y="17.5" width="5" height="1.5" rx=".75" fill="currentColor" opacity=".4"/>
+              <circle cx="10" cy="9" r="1.2" fill="var(--np-canvas,#111318)"/>
+              <circle cx="14" cy="9" r="1.2" fill="var(--np-canvas,#111318)"/>
+              <path d="M10 11.5q2 1.5 4 0" stroke="var(--np-canvas,#111318)" stroke-width="1" stroke-linecap="round"/>
+            </svg>
+          </button>
         </div>
         <div class="ab-bottom">
           <button class="ab-btn" id="ab-settings" title="Settings" aria-label="Settings">
@@ -439,6 +471,21 @@
             <!-- Scan meta -->
             <div id="po-footer"></div>
           </div>
+        </div>
+
+        <!-- Health Dashboard panel (Phase 2.25) -->
+        <div id="health-panel" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+          <!-- Populated by health-dashboard.js -->
+        </div>
+
+        <!-- Workspace Memory panel (Phase 2.5) -->
+        <div id="memory-panel" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+          <!-- Populated by workspace-memory.js -->
+        </div>
+
+        <!-- Project Reasoning panel (Phase 2.3) -->
+        <div id="reasoning-panel" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+          <!-- Populated by reasoning-engine.js -->
         </div>
 
         <!-- Global Search panel -->
@@ -673,6 +720,12 @@
     <script src="./ui/ai-chat.js"></script>
     <!--    Code Graph            (src/renderer/ui/) — Phase 2 -->
     <script src="./ui/project-graph.js"></script>
+    <!--    Health Dashboard      (src/renderer/ui/) — Phase 2.25 -->
+    <script src="./ui/health-dashboard.js"></script>
+    <!--    Workspace Memory      (src/renderer/ui/) — Phase 2.5 -->
+    <script src="./ui/workspace-memory.js"></script>
+    <!--    Project Reasoning     (src/renderer/ui/) — Phase 2.3 -->
+    <script src="./ui/reasoning-engine.js"></script>
 
     <!-- ── 6. Language intelligence platform ─────────────── -->
     <!--    Editor context menu: right-click actions for editor -->

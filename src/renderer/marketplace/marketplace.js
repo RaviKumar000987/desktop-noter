@@ -1389,3 +1389,4 @@ const Marketplace = (() => {
 
   return _api;
 })();
+window.Marketplace = Marketplace;

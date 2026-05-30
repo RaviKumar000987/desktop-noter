@@ -28,10 +28,26 @@ window.NoterCommands = (() => {
   // ── Execute ───────────────────────────────────────────────────
   function execute(id, ...args) {
     const cmd = _registry.get(id);
-    if (!cmd) { console.warn('[NoterCommands] Unknown command:', id); return; }
+    if (!cmd) {
+      console.warn('[NoterCommands] Unknown command:', id);
+      window.toast?.(`Unknown command: ${id}`, 'error', 2500);
+      return;
+    }
     _addHistory(id);
-    try { return cmd.handler(...args); }
-    catch (e) { console.error('[NoterCommands] Error in', id, e); }
+    try {
+      const result = cmd.handler(...args);
+      // Catch async handler rejections
+      if (result && typeof result.then === 'function') {
+        result.catch(e => {
+          console.error('[NoterCommands] Async error in', id, e);
+          window.toast?.(`Command failed: ${cmd.title} — ${e?.message || e}`, 'error', 3500);
+        });
+      }
+      return result;
+    } catch (e) {
+      console.error('[NoterCommands] Error in', id, e);
+      window.toast?.(`Command failed: ${cmd.title} — ${e?.message || e}`, 'error', 3500);
+    }
   }
 
   // ── Search (fuzzy + history-weighted) ────────────────────────

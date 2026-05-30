@@ -144,3 +144,4 @@ const SplitEditor = (() => {
 
   return { open, close, toggle, isActive, syncWithTab };
 })();
+window.SplitEditor = SplitEditor;

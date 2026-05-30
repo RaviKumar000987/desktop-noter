@@ -24,6 +24,8 @@ noter-watch-engine         = { path = "../crates/noter-watch-engine" }
 noter-code-graph           = { path = "../crates/noter-code-graph" }
 noter-symbol-intelligence  = { path = "../crates/noter-symbol-intelligence" }
 noter-ai-context           = { path = "../crates/noter-ai-context" }
+noter-reasoning-engine     = { path = "../crates/noter-reasoning-engine" }
+noter-memory-engine        = { path = "../crates/noter-memory-engine" }
 
 [build-dependencies]
 napi-build = "1"

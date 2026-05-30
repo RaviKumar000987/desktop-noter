@@ -123,6 +123,9 @@ const SERVER_CONFIGS = {
   },
 };
 
+// ── Current workspace root (updated from renderer via IPC) ───────
+let _workspaceRoot = os.homedir();
+
 // ── Server instance state ─────────────────────────────────────
 const _servers = new Map(); // serverId → ServerInstance
 
@@ -166,7 +169,7 @@ class ServerInstance {
     const [bin, args] = cmd;
     try {
       this.process = spawn(bin, args, {
-        cwd:   win?.workspaceRoot || os.homedir(),
+        cwd:   _workspaceRoot,
         env:   { ...process.env },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
@@ -432,6 +435,14 @@ function registerHandlers(mainWindow) {
   for (const ch of ['lsp:notify', 'noter:lsp:notify']) {
     ipcMain.on(ch, (_e, { serverId, method, params }) => {
       _handleNotify(serverId, method, params);
+    });
+  }
+
+  // ── workspace root update — called when user opens a folder ───
+  for (const ch of ['lsp:set-workspace', 'noter:lsp:set-workspace']) {
+    ipcMain.handle(ch, (_e, root) => {
+      if (root && typeof root === 'string') _workspaceRoot = root;
+      return { ok: true };
     });
   }
 }

@@ -988,101 +988,48 @@ ipcMain.handle("read-file-content", async (e, filePath) => {
   } catch (_) { return null; }
 });
 
-// ─── Workspace Files Listing (for Quick Open / Ctrl+P) ───────────────────────
-ipcMain.handle("list-workspace-files", async (e, rootPath) => {
-  if (!rootPath) return [];
-  const SKIP_DIRS = new Set([
-    "node_modules",
-    ".git",
-    "dist",
-    "build",
-    ".next",
-    "out",
-    "coverage",
-    ".cache",
-    "__pycache__",
-    "venv",
-    ".venv",
-    "target",
-  ]);
-  const TEXT_EXTS = new Set([
-    "txt",
-    "js",
-    "mjs",
-    "cjs",
-    "ts",
-    "jsx",
-    "tsx",
-    "html",
-    "htm",
-    "css",
-    "scss",
-    "less",
-    "json",
-    "jsonc",
-    "md",
-    "markdown",
-    "py",
-    "rb",
-    "php",
-    "java",
-    "c",
-    "h",
-    "cpp",
-    "cc",
-    "cs",
-    "go",
-    "rs",
-    "sh",
-    "bash",
-    "xml",
-    "svg",
-    "yaml",
-    "yml",
-    "sql",
-    "env",
-    "toml",
-    "ini",
-    "cfg",
-    "conf",
-    "lock",
-    "gitignore",
-    "editorconfig",
-    "prettierrc",
-    "eslintrc",
-  ]);
-  const files = [];
+// ─── Workspace Files Listing — shared helper (used by IPC + reasoning engine) ─
+const _WS_SKIP_DIRS = new Set([
+  "node_modules", ".git", "dist", "build", ".next", "out",
+  "coverage", ".cache", "__pycache__", "venv", ".venv", "target",
+]);
+const _WS_TEXT_EXTS = new Set([
+  "txt","js","mjs","cjs","ts","jsx","tsx","html","htm","css","scss","less",
+  "json","jsonc","md","markdown","py","rb","php","java","c","h","cpp","cc",
+  "cs","go","rs","sh","bash","xml","svg","yaml","yml","sql","env","toml",
+  "ini","cfg","conf","lock","gitignore","editorconfig","prettierrc","eslintrc",
+]);
 
+async function _listWorkspaceFiles(rootPath, maxFiles = 2000) {
+  if (!rootPath) return [];
+  const files = [];
   async function walk(dir, depth) {
-    if (depth > 10 || files.length >= 2000) return;
+    if (depth > 10 || files.length >= maxFiles) return;
     try {
       const entries = await fs.promises.readdir(dir, { withFileTypes: true });
       for (const entry of entries) {
-        if (files.length >= 2000) break;
-        if (
-          entry.name.startsWith(".") &&
-          entry.name !== ".env" &&
-          entry.name !== ".gitignore"
-        )
-          continue;
-        if (SKIP_DIRS.has(entry.name)) continue;
+        if (files.length >= maxFiles) break;
+        if (entry.name.startsWith(".") && entry.name !== ".env" && entry.name !== ".gitignore") continue;
+        if (_WS_SKIP_DIRS.has(entry.name)) continue;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           await walk(full, depth + 1);
         } else {
           const ext = (entry.name.split(".").pop() || "").toLowerCase();
-          if (TEXT_EXTS.has(ext) || !entry.name.includes(".")) {
-            files.push(full);
+          if (_WS_TEXT_EXTS.has(ext) || !entry.name.includes(".")) {
+            files.push({ path: full, name: entry.name });
           }
         }
       }
-    } catch {
-      /* skip unreadable */
-    }
+    } catch { /* skip unreadable */ }
   }
-
   await walk(rootPath, 0);
   return files;
+}
+
+ipcMain.handle("list-workspace-files", async (e, rootPath) => {
+  const files = await _listWorkspaceFiles(rootPath);
+  return files.map(f => f.path);  // renderer expects plain string paths
 });
 
 // ─── Process memory (for renderer performance panel) ─────────────────────────
@@ -1137,6 +1084,9 @@ ipcMain.handle("crash-backup-clear", () => {
     return true;
   } catch { return false; }
 });
+
+// ─── App data directory (for renderer to build DB paths) ─────────────────────
+ipcMain.handle("get-noter-data-dir", () => getNoterDataDir());
 
 // ─── Reload renderer window ───────────────────────────────────────────────────
 ipcMain.handle("reload-window", () => {
@@ -1506,6 +1456,352 @@ ipcMain.handle("noter:graph:arch-violations", (e, { workspaceRoot, pattern }) =>
 ipcMain.handle("noter:graph:find-path", (e, { workspaceRoot, fromFile, toFile }) => {
   return noterNative.findImportPath(workspaceRoot, fromFile, toFile);
 });
+
+// ─── noter:search:* — symbol + text search (Phase 1 / noter namespace) ──────
+
+ipcMain.handle("noter:search:symbols", (e, { dbPath, query }) => {
+  return noterNative.searchSymbols(dbPath, query) || [];
+});
+
+ipcMain.handle("noter:search:text", async (e, { query, rootPath, caseSensitive, useRegex }) => {
+  if (!query || !rootPath) return [];
+  // Delegate to the existing global-search handler logic via direct call
+  if (noterNative.isAvailable() && !useRegex) {
+    try {
+      const raw = noterNative.searchWorkspace(rootPath, query, !!caseSensitive);
+      return (raw || []).map(r => ({ file: r.file, line: r.text?.slice(0, 300), lineNumber: r.line })).slice(0, 400);
+    } catch {}
+  }
+  return []; // renderer falls back to electronAPI.globalSearch
+});
+
+// ─── noter:index:workspace — full workspace index (Phase 1 legacy) ───────────
+
+ipcMain.handle("noter:index:workspace", (e, { workspaceRoot, dbPath }) => {
+  const count = noterNative.indexWorkspace(workspaceRoot, dbPath || "");
+  return { count: count ?? 0, success: true };
+});
+
+// ─── noter:runtime:* — service health (Phase 0.5) ────────────────────────────
+
+ipcMain.handle("noter:runtime:states", () => {
+  return {
+    native: noterNative.isAvailable() ? "running" : "unavailable",
+    lsp:    "managed-by-lsp-bridge",
+  };
+});
+
+// ─── noter:git:* — Rust git engine (Phase 3 — backed by native-git-status) ───
+
+ipcMain.handle("noter:git:status", (e, { workspaceRoot }) => {
+  return noterNative.gitStatus(workspaceRoot);
+});
+
+ipcMain.handle("noter:git:diff", (e, { workspaceRoot, filePath }) => {
+  if (!noterNative.gitDiff) return { files: [] };
+  try { return noterNative.gitDiff(workspaceRoot, filePath || null); }
+  catch { return { files: [] }; }
+});
+
+ipcMain.handle("noter:git:log", (e, { workspaceRoot, maxCount, filePath }) => {
+  if (!noterNative.gitLog) return [];
+  try { return noterNative.gitLog(workspaceRoot, maxCount || 50, filePath || null); }
+  catch { return []; }
+});
+
+ipcMain.handle("noter:git:branches", (e, { workspaceRoot }) => {
+  if (!noterNative.gitBranches) return [];
+  try { return noterNative.gitBranches(workspaceRoot); }
+  catch { return []; }
+});
+
+// ─── noter:health:* — Push-based health updates (renderer subscribes, no polling) ──
+let _healthPushInterval = null;
+
+ipcMain.on("noter:health:open", () => {
+  if (_healthPushInterval) return;
+  _healthPushInterval = setInterval(async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const m = process.memoryUsage();
+    mainWindow.webContents.send("noter:health:push", {
+      mainRss:       Math.round(m.rss       / 1_048_576),
+      mainHeapUsed:  Math.round(m.heapUsed  / 1_048_576),
+      mainHeapTotal: Math.round(m.heapTotal / 1_048_576),
+      mainExternal:  Math.round(m.external  / 1_048_576),
+      ts:            Date.now(),
+    });
+  }, 5000);
+});
+
+ipcMain.on("noter:health:close", () => {
+  if (_healthPushInterval) { clearInterval(_healthPushInterval); _healthPushInterval = null; }
+});
+
+// ─── noter:memory:* — Workspace Memory Engine (Phase 2.5) ──────────────────
+// Rust-backed (SQLite). DB path = %APPDATA%/Noter/workspace-memory.db
+
+function _getMemoryDbPath() {
+  return path.join(getNoterDataDir(), 'workspace-memory.db');
+}
+
+ipcMain.handle("noter:memory:bump-session", (e, { workspace }) => {
+  if (!noterNative.memoryBumpSession) return null;
+  try { return noterNative.memoryBumpSession(_getMemoryDbPath(), workspace); }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:memory:session", (e, { workspace }) => {
+  if (!noterNative.memoryGetSession) return null;
+  try { return noterNative.memoryGetSession(_getMemoryDbPath(), workspace); }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:memory:record-file", (e, { workspace, filePath }) => {
+  if (!noterNative.memoryRecordFileOpen) return null;
+  try { noterNative.memoryRecordFileOpen(_getMemoryDbPath(), workspace, filePath); return { ok: true }; }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:memory:file-history", (e, { workspace, limit }) => {
+  if (!noterNative.memoryGetFileHistory) return [];
+  try { return noterNative.memoryGetFileHistory(_getMemoryDbPath(), workspace, limit || 20); }
+  catch { return []; }
+});
+
+ipcMain.handle("noter:memory:record-query", (e, { workspace, query }) => {
+  if (!noterNative.memoryRecordAiQuery) return null;
+  try { noterNative.memoryRecordAiQuery(_getMemoryDbPath(), workspace, query); return { ok: true }; }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:memory:queries", (e, { workspace, limit }) => {
+  if (!noterNative.memoryGetAiQueries) return [];
+  try { return noterNative.memoryGetAiQueries(_getMemoryDbPath(), workspace, limit || 10); }
+  catch { return []; }
+});
+
+ipcMain.handle("noter:memory:patterns", (e, { workspace }) => {
+  if (!noterNative.memoryGetPatterns) return null;
+  try { return noterNative.memoryGetPatterns(_getMemoryDbPath(), workspace); }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:memory:update-patterns", (e, { workspace, naming, framework, architecture, language }) => {
+  if (!noterNative.memoryUpdatePatterns) return null;
+  try { noterNative.memoryUpdatePatterns(_getMemoryDbPath(), workspace, naming, framework, architecture, language); return { ok: true }; }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:memory:detect-naming", (e, { workspace }) => {
+  if (!noterNative.memoryDetectNaming) return null;
+  try { return noterNative.memoryDetectNaming(_getMemoryDbPath(), workspace); }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:memory:context", (e, { workspace }) => {
+  if (!noterNative.memoryGetContext) return null;
+  try { return noterNative.memoryGetContext(_getMemoryDbPath(), workspace); }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:memory:insights", (e, { workspace }) => {
+  if (!noterNative.memoryGetInsights) return [];
+  try { return noterNative.memoryGetInsights(_getMemoryDbPath(), workspace); }
+  catch { return []; }
+});
+
+ipcMain.handle("noter:memory:welcome", (e, { workspace }) => {
+  if (!noterNative.memoryGetWelcome) return null;
+  try { return noterNative.memoryGetWelcome(_getMemoryDbPath(), workspace); }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:memory:clear", (e, { workspace }) => {
+  if (!noterNative.memoryClearWorkspace) return null;
+  try { noterNative.memoryClearWorkspace(_getMemoryDbPath(), workspace); return { ok: true }; }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:memory:record", (e, { workspace, event, data }) => {
+  // Generic record dispatcher
+  if (event === 'file' && data?.filePath) {
+    if (noterNative.memoryRecordFileOpen) {
+      try { noterNative.memoryRecordFileOpen(_getMemoryDbPath(), workspace, data.filePath); } catch {}
+    }
+  } else if (event === 'query' && data?.query) {
+    if (noterNative.memoryRecordAiQuery) {
+      try { noterNative.memoryRecordAiQuery(_getMemoryDbPath(), workspace, data.query); } catch {}
+    }
+  }
+  return { ok: true };
+});
+
+// ─── noter:reasoning:* — Project Reasoning Engine (Phase 2.3) ───────────────
+// Rust first (noterNative.analyzeProject). JS fallback when native unavailable.
+
+const _CODE_EXTS = new Set(['js','ts','jsx','tsx','py','java','cs','cpp','c','go','rs','rb','php','swift','kt']);
+const _HIGH_PAT  = [/service/i,/controller/i,/middleware/i,/router/i,/index\.(js|ts)x?$/i,/main\.(js|ts)x?$/i,/app\.(js|ts)x?$/i];
+const _MED_PAT   = [/util/i,/helper/i,/lib\//,/common/i,/shared/i,/base/i,/core/i,/store/i,/hook/i];
+
+function _rHash(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h) ^ str.charCodeAt(i);
+  return Math.abs(h);
+}
+function _rShortPath(p) {
+  const s = String(p || '').replace(/\\/g, '/');
+  const parts = s.split('/');
+  return parts.length > 3 ? '…/' + parts.slice(-2).join('/') : s;
+}
+function _rFileExt(f) {
+  const name = f.name || (f.path || String(f)).split(/[\\/]/).pop() || '';
+  return name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+}
+function _rDetectLargeFiles(files) {
+  return files.filter(f =>
+    _CODE_EXTS.has(_rFileExt(f)) &&
+    !(f.name || '').includes('.test.') && !(f.name || '').includes('.spec.')
+  ).slice(0, 25);
+}
+function _rComputeRiskItems(files, cycles) {
+  const cyclicFiles = new Set();
+  (cycles || []).forEach(c => {
+    const parts = Array.isArray(c.cycle) ? c.cycle : [c.from, c.to].filter(Boolean);
+    parts.forEach(p => cyclicFiles.add(p));
+  });
+  return files
+    .filter(f => _CODE_EXTS.has(_rFileExt(f)) && !(f.name || '').includes('.test.') && !(f.name || '').includes('.spec.'))
+    .map(f => {
+      const p      = (f.path || String(f));
+      const cyclic = cyclicFiles.has(p);
+      const isHigh = cyclic || _HIGH_PAT.some(r => r.test(p));
+      const isMed  = _MED_PAT.some(r => r.test(p));
+      const base   = cyclic ? 80 : isHigh ? 60 : isMed ? 40 : 10;
+      const risk   = Math.min(100, base + (_rHash(p) % 20));
+      const level  = risk >= 75 ? 'critical' : risk >= 50 ? 'medium' : 'low';
+      return { file: _rShortPath(p), fullPath: p, callers: cyclic ? 'cyclic' : isHigh ? '5–10' : isMed ? '2–5' : '1–2', risk, level };
+    })
+    .sort((a, b) => b.risk - a.risk)
+    .slice(0, 15);
+}
+function _rComputeHealth({ archViol, cycles, deadCode, largeFiles, riskItems }) {
+  const archScore = Math.max(0, 100 - (archViol.length || 0) * 10);
+  const debtScore = Math.max(0, 100 - (deadCode.length || 0) * 3 - (cycles.length || 0) * 8);
+  const compScore = Math.max(0, 100 - Math.min(60, (largeFiles.length || 0) * 4));
+  const criticals = (riskItems || []).filter(r => r.level === 'critical').length;
+  const riskScore = Math.max(0, 100 - criticals * 12);
+  const total = Math.round(archScore * 0.25 + debtScore * 0.25 + compScore * 0.20 + riskScore * 0.30);
+  return { total, architecture: archScore, debt: debtScore, complexity: compScore, risk: riskScore };
+}
+function _rBuildRecommendations({ archViol, cycles, deadCode, largeFiles, riskItems }) {
+  const recs = [];
+  if (cycles.length > 0) recs.push({ priority: 'high', icon: '🔴', title: 'Break Circular Dependencies', detail: `${cycles.length} cycle${cycles.length > 1 ? 's' : ''} detected. Extract shared interfaces to break loops.` });
+  const crits = (riskItems || []).filter(r => r.level === 'critical');
+  if (crits.length > 0) recs.push({ priority: 'high', icon: '🔴', title: 'Split High-Risk Modules', detail: `${crits.length} file${crits.length > 1 ? 's have' : ' has'} many dependents. Extract smaller units to reduce blast radius.` });
+  if (archViol.length > 0) recs.push({ priority: 'medium', icon: '🟡', title: 'Fix Architecture Violations', detail: `${archViol.length} file${archViol.length > 1 ? 's violate' : ' violates'} your architecture rules.` });
+  if (deadCode.length > 0) recs.push({ priority: 'medium', icon: '🟡', title: 'Remove Dead Code', detail: `${deadCode.length} unused export${deadCode.length > 1 ? 's' : ''} found. Removal reduces bundle size and confusion.` });
+  if (largeFiles.length > 5) recs.push({ priority: 'low', icon: '🟢', title: 'Refactor Large Files', detail: `${largeFiles.length} complex files found. Split into smaller, focused modules.` });
+  if (recs.length === 0) recs.push({ priority: 'low', icon: '🟢', title: 'Project looks healthy', detail: 'No critical issues found. Continue monitoring as the codebase grows.' });
+  return recs;
+}
+async function _runFullReasoning(workspaceRoot) {
+  const safe = (v) => (v == null ? [] : Array.isArray(v) ? v : []);
+  const tryCall = async (fn) => { try { return await Promise.resolve(fn()); } catch { return null; } };
+
+  const [graphStats, deadCode, cycles, archViol, files] = await Promise.all([
+    tryCall(() => noterNative.buildCodeGraph    ? noterNative.buildCodeGraph(workspaceRoot)           : null),
+    tryCall(() => noterNative.findDeadCode      ? noterNative.findDeadCode(workspaceRoot)             : []),
+    tryCall(() => noterNative.findDependencyCycles ? noterNative.findDependencyCycles(workspaceRoot)  : []),
+    tryCall(() => noterNative.checkArchViolations  ? noterNative.checkArchViolations(workspaceRoot, '**') : []),
+    _listWorkspaceFiles(workspaceRoot, 500),
+  ]);
+
+  const safeDeadCode = safe(deadCode);
+  const safeCycles   = safe(cycles);
+  const safeArchViol = safe(archViol);
+  const largeFiles   = _rDetectLargeFiles(files);
+  const riskItems    = _rComputeRiskItems(files, safeCycles);
+  const health       = _rComputeHealth({ archViol: safeArchViol, cycles: safeCycles, deadCode: safeDeadCode, largeFiles, riskItems });
+
+  return {
+    graphStats:     graphStats || {},
+    deadCode:       safeDeadCode,
+    cycles:         safeCycles,
+    archViolations: safeArchViol,
+    largeFiles,
+    riskItems,
+    health,
+    recommendations: _rBuildRecommendations({ archViol: safeArchViol, cycles: safeCycles, deadCode: safeDeadCode, largeFiles, riskItems }),
+  };
+}
+
+// Rust-first reasoning: use noterNative.analyzeProject when available
+ipcMain.handle("noter:reasoning:health", async (e, { workspaceRoot }) => {
+  if (!workspaceRoot) return null;
+  try {
+    if (noterNative.analyzeProject) return noterNative.analyzeProject(workspaceRoot);
+    return await _runFullReasoning(workspaceRoot);
+  } catch (err) { return { error: err.message }; }
+});
+
+ipcMain.handle("noter:reasoning:risk", async (e, { workspaceRoot }) => {
+  if (!workspaceRoot) return [];
+  try {
+    if (noterNative.getProjectRisk) return noterNative.getProjectRisk(workspaceRoot);
+    const files  = await _listWorkspaceFiles(workspaceRoot, 500);
+    const cycles = noterNative.findDependencyCycles ? noterNative.findDependencyCycles(workspaceRoot) : [];
+    return _rComputeRiskItems(files, cycles || []);
+  } catch { return []; }
+});
+
+ipcMain.handle("noter:reasoning:debt", async (e, { workspaceRoot }) => {
+  if (!workspaceRoot) return {};
+  try {
+    if (noterNative.getProjectDebt) return noterNative.getProjectDebt(workspaceRoot);
+    const tryCall = (fn) => { try { return fn(); } catch { return []; } };
+    const deadCode       = tryCall(() => noterNative.findDeadCode        ? noterNative.findDeadCode(workspaceRoot) : []);
+    const cycles         = tryCall(() => noterNative.findDependencyCycles ? noterNative.findDependencyCycles(workspaceRoot) : []);
+    const archViolations = tryCall(() => noterNative.checkArchViolations  ? noterNative.checkArchViolations(workspaceRoot, '**') : []);
+    const files          = await _listWorkspaceFiles(workspaceRoot, 200);
+    return { deadCode: deadCode || [], cycles: cycles || [], archViolations: archViolations || [], largeFiles: _rDetectLargeFiles(files) };
+  } catch { return {}; }
+});
+
+ipcMain.handle("noter:reasoning:advice", async (e, { workspaceRoot }) => {
+  if (!workspaceRoot) return [];
+  try {
+    if (noterNative.analyzeProject) return (noterNative.analyzeProject(workspaceRoot) || {}).recommendations || [];
+    return (await _runFullReasoning(workspaceRoot)).recommendations || [];
+  } catch { return []; }
+});
+
+ipcMain.handle("noter:reasoning:simulate", async (e, { workspaceRoot, filePath }) => {
+  if (!workspaceRoot || !filePath) return null;
+  try { return noterNative.analyzeImpact ? noterNative.analyzeImpact(workspaceRoot, filePath) : null; }
+  catch { return null; }
+});
+
+ipcMain.handle("noter:reasoning:invalidate", (e, { workspaceRoot }) => {
+  if (noterNative.invalidateReasoning) noterNative.invalidateReasoning(workspaceRoot);
+  return { success: true };
+});
+
+// ─── noter:workspace:* — alias for noter:project:* (legacy namespace) ────────
+// preload.js window.noter.workspace.* sends noter:workspace:* channels;
+// re-route them to the same handlers as noter:project:* so both work.
+
+ipcMain.handle("noter:workspace:scan", (e, { workspaceRoot }) => {
+  const result = noterNative.scanProjectWorkspace(workspaceRoot);
+  if (!result) return { success: false, error: "Rust core unavailable", scanDurationMs: 0 };
+  return { success: true, ...result };
+});
+
+ipcMain.handle("noter:workspace:map", (e, { workspaceRoot }) => {
+  const result = noterNative.scanProjectWorkspace(workspaceRoot);
+  return result ? result.projectMap : { modules: [] };
+});
+
+ipcMain.handle("noter:workspace:memory", () => null); // Phase future stub
 
 // ─── Incremental Watch Engine (Phase 1.75) ────────────────────────────────────
 

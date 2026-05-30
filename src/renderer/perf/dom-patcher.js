@@ -56,27 +56,34 @@ window.TabPatcher = (() => {
     if (label && label.textContent !== tab.title) label.textContent = tab.title;
   }
 
-  // Wire events ONCE when an element is created (not on every render)
-  function _wireEvents(el, tab, TabManagerRef, actionsRef) {
-    el.addEventListener('click', () => TabManagerRef.activate(tab.id));
+  // Wire events ONCE when an element is created (not on every render).
+  // All handlers access window.TabManager lazily (at event-fire time, not wiring time)
+  // so they work regardless of script load order.
+  function _wireEvents(el, tab) {
+    const id = tab.id; // capture only the id — avoids stale tab object refs
+
+    el.addEventListener('click', () => window.TabManager?.activate(id));
     el.addEventListener('mousedown', (e) => {
-      if (e.button === 1) { e.preventDefault(); TabManagerRef.close(tab.id); }
+      if (e.button === 1) { e.preventDefault(); window.TabManager?.close(id); }
     });
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault(); e.stopPropagation();
-      // showTabContextMenu is a global in app.js
       if (typeof showTabContextMenu === 'function') {
-        showTabContextMenu(tab, e.clientX, e.clientY);
+        // Find the live tab object so context menu has current state
+        const liveTab = window.TabManager?.tabs.find(t => t.id === id);
+        if (liveTab) showTabContextMenu(liveTab, e.clientX, e.clientY);
       }
     });
 
     const close = el.querySelector('.tab-close');
-    if (close) close.addEventListener('click', (e) => {
-      e.stopPropagation();
-      TabManagerRef.close(tab.id);
-    });
+    if (close) {
+      close.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.TabManager?.close(id);
+      });
+    }
 
-    // Drag events (TabDnD is global in app.js)
+    // Drag events — TabDnD already accessed via window
     el.addEventListener('dragstart',  (e) => window.TabDnD?.onDragStart(e));
     el.addEventListener('dragover',   (e) => window.TabDnD?.onDragOver(e));
     el.addEventListener('dragleave',  (e) => window.TabDnD?.onDragLeave(e));
@@ -110,7 +117,7 @@ window.TabPatcher = (() => {
 
       if (isNew) {
         el = _createEl(tab);
-        _wireEvents(el, tab, window.TabManager, window.actions);
+        _wireEvents(el, tab);
       }
 
       _updateEl(el, tab, tab.id === activeId);

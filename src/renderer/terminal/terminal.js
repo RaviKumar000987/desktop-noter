@@ -424,5 +424,6 @@ window.TerminalPanel = (() => {
     if (pane) pane.style.display = 'none';
   }
 
-  return { init, show, hide, newSession, fit, focus, fitAndFocus, clear, setCwd, toggleSearch };
+  return { init, show, hide, newSession, fit, focus, fitAndFocus, clear, setCwd, toggleSearch,
+           isRunning: () => ptyReady };
 })();

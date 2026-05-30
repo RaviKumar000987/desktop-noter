@@ -30,9 +30,19 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'file.closeAll',    title: 'Close All Tabs',     category: 'File',
       handler: () => window.TabManager?.closeAll?.() },
     { id: 'file.reopenClosed',title: 'Reopen Closed Tab',  category: 'File',   aliases: ['reopen'],
-      handler: () => typeof toast === 'function' && toast('Reopen Closed Tab — coming soon', 'info') },
+      handler: () => window.toast?.('Reopen Closed Tab — coming soon', 'info') },
     { id: 'file.saveAll',     title: 'Save All',           category: 'File',
-      handler: () => { const tabs = window.TabManager?.getAll?.() || []; tabs.forEach(t => { if (t.isModified && t.filePath) window.actions?.saveFile?.(); }); } },
+      handler: async () => {
+        const tabs = window.TabManager?.tabs || [];
+        const active = window.TabManager?.getActive?.();
+        for (const t of tabs) {
+          if (t.isModified && t.filePath) {
+            window.TabManager?.activate?.(t.id);
+            await window.actions?.saveFile?.();
+          }
+        }
+        if (active) window.TabManager?.activate?.(active.id);
+      } },
     { id: 'file.newWorkspace', title: 'New Workspace',     category: 'File',
       handler: () => typeof createWorkspace === 'function' && createWorkspace() },
     { id: 'file.saveWorkspace', title: 'Save Workspace',   category: 'File',
@@ -63,15 +73,15 @@ document.addEventListener('DOMContentLoaded', () => {
       handler: () => tr('workbench.action.navigateForward') },
     { id: 'nav.nextTab',         title: 'Next Tab',              category: 'Navigation',
       handler: () => {
-        const tabs = window.TabManager?.getAll?.() || []; if (!tabs.length) return;
-        const i = tabs.findIndex(t => t.id === window.TabManager.getActive?.()?.id);
-        window.TabManager.activate?.(tabs[(i + 1) % tabs.length]?.id);
+        const tabs = window.TabManager?.tabs || []; if (!tabs.length) return;
+        const i = tabs.findIndex(t => t.id === window.TabManager?.getActive?.()?.id);
+        window.TabManager?.activate?.(tabs[(i + 1) % tabs.length]?.id);
       } },
     { id: 'nav.prevTab',         title: 'Previous Tab',          category: 'Navigation',
       handler: () => {
-        const tabs = window.TabManager?.getAll?.() || []; if (!tabs.length) return;
-        const i = tabs.findIndex(t => t.id === window.TabManager.getActive?.()?.id);
-        window.TabManager.activate?.(tabs[(i - 1 + tabs.length) % tabs.length]?.id);
+        const tabs = window.TabManager?.tabs || []; if (!tabs.length) return;
+        const i = tabs.findIndex(t => t.id === window.TabManager?.getActive?.()?.id);
+        window.TabManager?.activate?.(tabs[(i - 1 + tabs.length) % tabs.length]?.id);
       } },
 
     // ── Editing ──────────────────────────────────────────────────
@@ -172,13 +182,17 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'view.toggleSidebar', title: 'Toggle Sidebar',         category: 'View', aliases: ['sidebar','explorer'],
       handler: () => typeof toggleSidebar === 'function' && toggleSidebar() },
     { id: 'view.explorer',      title: 'Show Explorer',          category: 'View',
-      handler: () => window.ActivityBar?.setActive?.('explorer') },
+      handler: () => document.getElementById('ab-explorer')?.click() },
     { id: 'view.extensions',    title: 'Show Extensions',        category: 'View', aliases: ['marketplace','extensions'],
-      handler: () => window.ActivityBar?.setActive?.('extensions') },
+      handler: () => window.Marketplace?.open?.() },
     { id: 'view.sourceControl', title: 'Show Source Control',    category: 'View', aliases: ['git','scm'],
-      handler: () => { typeof toast === 'function' && toast('Source Control panel coming soon', 'info'); } },
+      handler: () => window.toast?.('Git UI coming in Phase 3', 'info') },
     { id: 'view.problems',      title: 'Show Problems',          category: 'View',
-      handler: () => { typeof toast === 'function' && toast('Problems panel coming soon', 'info'); } },
+      handler: () => {
+        // Open the bottom panel and switch to Problems tab
+        window.TerminalPanel?.show?.();
+        setTimeout(() => document.querySelector('[data-tab="problems"]')?.click(), 80);
+      } },
     { id: 'view.toggleTerminal',title: 'Toggle Terminal',        category: 'View', aliases: ['terminal'],
       handler: () => window.TerminalPanel?.toggle?.() },
     { id: 'view.splitEditor',   title: 'Split Editor',           category: 'View', aliases: ['split'],
@@ -211,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'workbench.themePicker', title: 'Select Color Theme',  category: 'Workspace', aliases: ['theme'],
       handler: () => window.SettingsUI?.open?.() },
     { id: 'workbench.debug',    title: 'Debug Panel',            category: 'Workspace',
-      handler: () => { typeof toast === 'function' && toast('Debugger coming in a future update', 'info'); } },
+      handler: () => { window.toast?.('Debugger coming in a future update', 'info'); } },
     { id: 'workbench.reloadWindow', title: 'Reload Window',      category: 'Developer',
       handler: () => location.reload() },
     { id: 'workbench.devtools', title: 'Open DevTools',          category: 'Developer',
@@ -221,9 +235,9 @@ document.addEventListener('DOMContentLoaded', () => {
         window.IntelliSenseEngine?.rebuildIndex?.();
         const root = window.explorerState?.rootPath;
         if (root && window.electronAPI?.nativeIndexWorkspace && window._noterSymbolDb) {
-          typeof toast === 'function' && toast('Rebuilding symbol index…', 'info');
+          window.toast?.('Rebuilding symbol index…', 'info');
           const count = await window.electronAPI.nativeIndexWorkspace(root, window._noterSymbolDb);
-          typeof toast === 'function' && toast(`Symbol index rebuilt — ${count} symbols`, 'success');
+          window.toast?.(`Symbol index rebuilt — ${count} symbols`, 'success');
         }
       } },
     { id: 'workbench.clearCache', title: 'Clear Cache',          category: 'Developer',
@@ -231,12 +245,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!confirm('Clear all cached data (settings and history will be preserved)?')) return;
         const keep = ['noter.settings.user','noter.settings.workspace','noter.keybindings','noter.settings.profile','noter.welcome.show'];
         Object.keys(localStorage).filter(k => k.startsWith('noter.') && !keep.includes(k)).forEach(k => localStorage.removeItem(k));
-        typeof toast === 'function' && toast('Cache cleared', 'info');
+        window.toast?.('Cache cleared', 'info');
       } },
 
     // ── Debug (stub) ──────────────────────────────────────────────
     { id: 'debug.start',   title: 'Start Debugging',    category: 'Debug',
-      handler: () => { typeof toast === 'function' && toast('Debugger not available', 'info'); } },
+      handler: () => { window.toast?.('Debugger not available', 'info'); } },
     { id: 'debug.stop',    title: 'Stop Debugging',     category: 'Debug',
       handler: () => {} },
     { id: 'debug.stepOver',title: 'Step Over',          category: 'Debug', handler: () => {} },
@@ -246,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Help ──────────────────────────────────────────────────────
     { id: 'help.about',    title: 'About Noter',        category: 'Help',
-      handler: () => { typeof toast === 'function' && toast('Noter v2.0 — Electron + Monaco Editor', 'info'); } },
+      handler: () => { window.toast?.('Noter v2.0 — Electron + Monaco Editor', 'info'); } },
     { id: 'help.performance', title: 'Performance Monitor', category: 'Help',
       handler: () => window.PerformanceMonitor?.showDiagnostics?.() },
   ]);

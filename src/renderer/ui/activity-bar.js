@@ -24,26 +24,30 @@ const ActivityBar = (() => {
   }
 
   function showSidebar() {
-    const sb = $("sidebar");
-    const rh = $("resize-handle");
-    if (sb) sb.classList.remove("hidden");
-    if (rh) rh.classList.remove("hidden");
+    // toggleSidebar(true) in app.js sets the authoritative sidebarVisible var
+    // and handles DOM updates. We only call it if the sidebar is actually hidden.
+    if (typeof window.toggleSidebar === "function") {
+      window.toggleSidebar(true);
+    } else {
+      const sb = $("sidebar");
+      const rh = $("resize-handle");
+      if (sb) sb.classList.remove("hidden");
+      if (rh) rh.classList.remove("hidden");
+    }
     window.dispatchEvent(new CustomEvent("sidebar-shown"));
-    // Keep the main sidebar state in sync (app.js uses sidebarVisible var)
-    window.sidebarVisible = true;
-    const tog = $("sidebar-toggle");
-    if (tog) tog.classList.add("active");
   }
 
   function hideSidebar() {
-    const sb = $("sidebar");
-    const rh = $("resize-handle");
-    if (sb) sb.classList.add("hidden");
-    if (rh) rh.classList.add("hidden");
+    // toggleSidebar(false) in app.js sets the authoritative sidebarVisible var.
+    if (typeof window.toggleSidebar === "function") {
+      window.toggleSidebar(false);
+    } else {
+      const sb = $("sidebar");
+      const rh = $("resize-handle");
+      if (sb) sb.classList.add("hidden");
+      if (rh) rh.classList.add("hidden");
+    }
     window.dispatchEvent(new CustomEvent("sidebar-hidden"));
-    window.sidebarVisible = false;
-    const tog = $("sidebar-toggle");
-    if (tog) tog.classList.remove("active");
   }
 
   function enterExplorerMode() {
@@ -54,7 +58,7 @@ const ActivityBar = (() => {
       if (title) title.textContent = "EXPLORER";
     }
     // Hide all non-explorer sidebar panels
-    ["search-panel", "project-overview-panel", "code-graph-panel", "ai-chat-panel"].forEach(id => {
+    ["search-panel", "project-overview-panel", "code-graph-panel", "ai-chat-panel", "memory-panel", "reasoning-panel"].forEach(id => {
       const el = $(id);
       if (el) el.style.display = "none";
     });
@@ -78,7 +82,7 @@ const ActivityBar = (() => {
       if (title) title.textContent = "SEARCH";
     }
     // Hide phase 2 panels when entering search
-    ["project-overview-panel", "code-graph-panel", "ai-chat-panel"].forEach(id => {
+    ["project-overview-panel", "code-graph-panel", "ai-chat-panel", "memory-panel", "reasoning-panel"].forEach(id => {
       const el = $(id);
       if (el) el.style.display = "none";
     });
@@ -137,7 +141,7 @@ const ActivityBar = (() => {
         if (title) title.textContent = "AI ASSISTANT";
       }
       // Hide other panels
-      ["search-panel", "code-graph-panel", "project-overview-panel"].forEach(id => {
+      ["search-panel", "code-graph-panel", "project-overview-panel", "memory-panel", "reasoning-panel"].forEach(id => {
         const el = $(id);
         if (el) el.style.display = "none";
       });
@@ -166,7 +170,7 @@ const ActivityBar = (() => {
         if (title) title.textContent = "PROJECT";
       }
       // Hide other sidebar panels and explorer content
-      ["search-panel", "code-graph-panel"].forEach(id => {
+      ["search-panel", "code-graph-panel", "memory-panel", "reasoning-panel"].forEach(id => {
         const el = $(id);
         if (el) el.style.display = "none";
       });
@@ -194,6 +198,82 @@ const ActivityBar = (() => {
       }
     }
   });
+
+  // ── Activity bar icon drag-to-reorder ────────────────────────
+  (function initActivityBarDnD() {
+    const topSlot = document.querySelector('#activity-bar .ab-top');
+    if (!topSlot) return;
+
+    let dragSrc = null;
+
+    function attachHandlers(btn) {
+      btn.setAttribute('draggable', 'true');
+      btn.addEventListener('dragstart',  onDragStart);
+      btn.addEventListener('dragend',    onDragEnd);
+      btn.addEventListener('dragover',   onDragOver);
+      btn.addEventListener('dragleave',  onDragLeave);
+      btn.addEventListener('drop',       onDrop);
+    }
+
+    function onDragStart(e) {
+      dragSrc = this;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', this.id);
+      // Delay class so the ghost image captures the un-dimmed button
+      setTimeout(() => this.classList.add('ab-dragging'), 0);
+    }
+
+    function onDragEnd() {
+      this.classList.remove('ab-dragging');
+      topSlot.querySelectorAll('.ab-btn').forEach(b => b.classList.remove('ab-drag-over'));
+      dragSrc = null;
+      _saveOrder();
+    }
+
+    function onDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragSrc && this !== dragSrc) this.classList.add('ab-drag-over');
+    }
+
+    function onDragLeave() {
+      this.classList.remove('ab-drag-over');
+    }
+
+    function onDrop(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      if (!dragSrc || dragSrc === this) return;
+
+      const btns   = [...topSlot.querySelectorAll('.ab-btn')];
+      const srcIdx = btns.indexOf(dragSrc);
+      const tgtIdx = btns.indexOf(this);
+
+      if (srcIdx < tgtIdx) topSlot.insertBefore(dragSrc, this.nextSibling);
+      else                 topSlot.insertBefore(dragSrc, this);
+
+      this.classList.remove('ab-drag-over');
+    }
+
+    function _saveOrder() {
+      const order = [...topSlot.querySelectorAll('.ab-btn')].map(b => b.id);
+      try { localStorage.setItem('noter.activity-bar-order', JSON.stringify(order)); } catch {}
+    }
+
+    function _restoreOrder() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('noter.activity-bar-order') || 'null');
+        if (!Array.isArray(saved) || !saved.length) return;
+        saved.forEach(id => {
+          const btn = document.getElementById(id);
+          if (btn && btn.closest('.ab-top') === topSlot) topSlot.appendChild(btn);
+        });
+      } catch {}
+    }
+
+    _restoreOrder();
+    topSlot.querySelectorAll('.ab-btn').forEach(attachHandlers);
+  })();
 
   // ── Keep in sync with keyboard shortcut Ctrl+B ───────────────
   // app.js dispatches these when toggling via keyboard/menu
@@ -229,3 +309,4 @@ const ActivityBar = (() => {
     getActive: () => active,
   };
 })();
+window.ActivityBar = ActivityBar;
