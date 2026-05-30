@@ -53,9 +53,11 @@ const ActivityBar = (() => {
       const title = sb.querySelector(".sidebar-title");
       if (title) title.textContent = "EXPLORER";
     }
-    // Hide search panel
-    const searchPanel = $("search-panel");
-    if (searchPanel) searchPanel.style.display = "none";
+    // Hide all non-explorer sidebar panels
+    ["search-panel", "project-overview-panel", "code-graph-panel", "ai-chat-panel"].forEach(id => {
+      const el = $(id);
+      if (el) el.style.display = "none";
+    });
 
     // Restore explorer panels using app.js state — never blindly clear
     // inline styles, since openExplorerFolder sets them based on whether
@@ -75,6 +77,11 @@ const ActivityBar = (() => {
       const title = sb.querySelector(".sidebar-title");
       if (title) title.textContent = "SEARCH";
     }
+    // Hide phase 2 panels when entering search
+    ["project-overview-panel", "code-graph-panel", "ai-chat-panel"].forEach(id => {
+      const el = $(id);
+      if (el) el.style.display = "none";
+    });
     $("gs-search-btn")?.classList.add("gs-active");
     setTimeout(() => $("gs-input")?.focus(), 80);
   }
@@ -114,6 +121,63 @@ const ActivityBar = (() => {
     setTimeout(() => {
       if (active === "extensions") setActive(active === "explorer" ? "explorer" : null);
     }, 300);
+  });
+
+  // ── AI Chat button ────────────────────────────────────────────
+  $("ab-ai")?.addEventListener("click", () => {
+    if (active === "ai" && isSidebarVisible()) {
+      hideSidebar();
+      setActive(null);
+    } else {
+      showSidebar();
+      const sb = $("sidebar");
+      if (sb) {
+        sb.classList.remove("search-mode");
+        const title = sb.querySelector(".sidebar-title");
+        if (title) title.textContent = "AI ASSISTANT";
+      }
+      // Hide other panels
+      ["search-panel", "code-graph-panel", "project-overview-panel"].forEach(id => {
+        const el = $(id);
+        if (el) el.style.display = "none";
+      });
+      [$("no-folder-msg"), $("explorer-content")].forEach(el => {
+        if (el) el.style.display = "none";
+      });
+      if (typeof AiChat !== "undefined") {
+        AiChat.show();
+      }
+      setActive("ai");
+    }
+  });
+
+  // ── Project Overview button ───────────────────────────────────
+  $("ab-project")?.addEventListener("click", () => {
+    if (active === "project" && isSidebarVisible()) {
+      hideSidebar();
+      setActive(null);
+    } else {
+      showSidebar();
+      // Update sidebar title
+      const sb = $("sidebar");
+      if (sb) {
+        sb.classList.remove("search-mode");
+        const title = sb.querySelector(".sidebar-title");
+        if (title) title.textContent = "PROJECT";
+      }
+      // Hide other sidebar panels and explorer content
+      ["search-panel", "code-graph-panel"].forEach(id => {
+        const el = $(id);
+        if (el) el.style.display = "none";
+      });
+      [$("no-folder-msg"), $("explorer-content")].forEach(el => {
+        if (el) el.style.display = "none";
+      });
+      if (typeof ProjectOverview !== "undefined") {
+        ProjectOverview.show();
+      }
+      setActive("project");
+    }
   });
 
   // ── Settings button ───────────────────────────────────────────

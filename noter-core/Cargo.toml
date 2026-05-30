@@ -17,6 +17,11 @@ members = [
     "crates/noter-ext-host",
     "crates/noter-scheduler",
     "crates/noter-cache",
+    "crates/noter-project-engine",
+    "crates/noter-index-engine",
+    "crates/noter-watch-engine",
+    "crates/noter-code-graph",
+    "crates/noter-symbol-intelligence",
 ]
 
 [workspace.package]
@@ -50,3 +55,12 @@ lsp-types = "0.95"
 async-trait = "0.1"
 # Stable unique IDs for symbols (v5 = deterministic from content hash)
 uuid = { version = "1", features = ["v5", "serde"] }
+# Project engine — directory walking + TOML manifest parsing
+walkdir = "2"
+toml = "0.8"
+# Code graph — directed graph with stable indices (for incremental node removal)
+petgraph = { version = "0.6", features = ["serde-1"] }
+# Import/export pattern extraction from source files
+regex = "1"
+# Lazy regex compilation (zero-cost on subsequent calls)
+once_cell = "1"

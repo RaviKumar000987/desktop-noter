@@ -32,6 +32,49 @@ pub enum NoterEvent {
     // ── Cache ─────────────────────────────────────────────────────────────
     CacheUpdated { key: String },
     CacheEvicted { key: String },
+
+    // ── Project Intelligence (Phase 1.5) ──────────────────────────────────
+    ProjectScanStarted  { workspace: String },
+    ProjectScanned {
+        workspace: String,
+        language_count: usize,
+        framework_count: usize,
+        dependency_count: usize,
+        architecture_pattern: String,
+        scan_duration_ms: u64,
+    },
+    ProjectScanFailed   { workspace: String, error: String },
+
+    // ── Code Graph (Phase 2) ──────────────────────────────────────────────
+    GraphBuildStarted  { workspace: String },
+    GraphBuilt {
+        workspace: String,
+        file_count: usize,
+        symbol_count: usize,
+        edge_count: usize,
+        duration_ms: u64,
+    },
+    GraphFileUpdated   { workspace: String, file: FileRef },
+    ImpactAnalyzed     { workspace: String, target_file: String, affected_count: usize },
+
+    // ── Incremental Index (Phase 1.75) ────────────────────────────────────
+    WatchStarted        { workspace: String },
+    WatchStopped        { workspace: String },
+    InitialScanComplete {
+        workspace: String,
+        files_indexed: usize,
+        symbols_found: usize,
+        duration_ms: u64,
+    },
+    FileReindexed {
+        workspace: String,
+        file: FileRef,
+        kind: String,
+        symbols_before: usize,
+        symbols_after: usize,
+        duration_ms: u64,
+    },
+    FileDeleted         { workspace: String, file: FileRef },
 }
 
 // ── Layer 1: broadcast channel type alias ─────────────────────────────────────

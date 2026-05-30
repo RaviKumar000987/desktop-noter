@@ -1,0 +1,13 @@
+[package]
+name = "noter-project-engine"
+description = "Phase 1.5 — Project Intelligence Engine: manifest parsing, framework detection, architecture analysis, dependency graph, project map"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace    = true
+serde.workspace     = true
+serde_json.workspace = true
+tracing.workspace   = true
+walkdir.workspace   = true
+toml.workspace      = true

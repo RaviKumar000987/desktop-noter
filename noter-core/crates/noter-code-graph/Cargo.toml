@@ -1,0 +1,17 @@
+[package]
+name = "noter-code-graph"
+description = "Phase 2 — Code Graph Engine: 9-layer project brain. Symbol Registry → Graph Builder → Cross-file Resolver → Query Engine → Impact Analysis → Dead Code → Cycles → Architecture Violations. petgraph StableDiGraph + incremental updates from Phase 1.75."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace    = true
+serde.workspace     = true
+serde_json.workspace = true
+tracing.workspace   = true
+walkdir.workspace   = true
+rayon.workspace     = true
+petgraph.workspace  = true
+regex.workspace     = true
+once_cell.workspace = true
+noter-core-api      = { path = "../noter-core-api" }

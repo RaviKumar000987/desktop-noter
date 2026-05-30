@@ -17,8 +17,13 @@ noter-search      = { path = "../crates/noter-search" }
 noter-git         = { path = "../crates/noter-git" }
 noter-indexer     = { path = "../crates/noter-indexer" }
 noter-symboldb    = { path = "../crates/noter-symboldb" }
-noter-watcher     = { path = "../crates/noter-watcher" }
-noter-cache       = { path = "../crates/noter-cache" }
+noter-watcher         = { path = "../crates/noter-watcher" }
+noter-cache           = { path = "../crates/noter-cache" }
+noter-project-engine  = { path = "../crates/noter-project-engine" }
+noter-watch-engine         = { path = "../crates/noter-watch-engine" }
+noter-code-graph           = { path = "../crates/noter-code-graph" }
+noter-symbol-intelligence  = { path = "../crates/noter-symbol-intelligence" }
+noter-ai-context           = { path = "../crates/noter-ai-context" }
 
 [build-dependencies]
 napi-build = "1"

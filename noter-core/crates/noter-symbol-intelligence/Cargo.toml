@@ -1,0 +1,18 @@
+[package]
+name = "noter-symbol-intelligence"
+description = "Phase 2.1 — Symbol Intelligence: function call graph (RAM+SQLite), find callers/callees/implementations, execution flow tracer, impact analysis"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace   = true
+serde.workspace    = true
+serde_json.workspace = true
+tracing.workspace  = true
+rayon.workspace    = true
+uuid.workspace     = true
+petgraph.workspace = true
+once_cell.workspace = true
+regex.workspace    = true
+rusqlite = { version = "0.31", features = ["bundled"] }
+walkdir.workspace  = true

@@ -1300,3 +1300,262 @@ ipcMain.handle("native-cache-set", (e, { dbPath, namespace, key, value }) => {
 ipcMain.handle("native-cache-get", (e, { dbPath, namespace, key }) => {
   return noterNative.cacheGet(dbPath, namespace, key);
 });
+
+// ─── AI Context Engine (Phase 2.2) ───────────────────────────────────────────
+
+let aiProvider = null;
+try {
+  aiProvider = require('./ai-provider');
+} catch (e) {
+  console.warn('[Main] ai-provider not loaded:', e.message);
+}
+
+// noter:ai:query — build context + stream response
+ipcMain.handle("noter:ai:query", async (e, { workspaceRoot, query, symbolDbPath, project, model }) => {
+  if (!aiProvider) return { error: 'AI provider not available' };
+
+  const projectInfo = project || { language: '', framework: null, architecture: null, database: null, orm: null, authSystem: null };
+  const nativeProject = {
+    language:     projectInfo.language     || '',
+    framework:    projectInfo.framework    || null,
+    architecture: projectInfo.architecture || null,
+    database:     projectInfo.database     || null,
+    orm:          projectInfo.orm          || null,
+    authSystem:   projectInfo.authSystem   || null,
+  };
+
+  // Build context (Rust — fast)
+  const ctx = noterNative.buildAiContext
+    ? noterNative.buildAiContext(workspaceRoot, query, symbolDbPath || '', nativeProject)
+    : null;
+
+  // Build prompt (Rust — instant)
+  const prompt = noterNative.buildAiPrompt
+    ? noterNative.buildAiPrompt(workspaceRoot, query, symbolDbPath || '', nativeProject, model || 'claude-sonnet-4-6')
+    : { system: 'You are a helpful coding assistant.', user: query, model: 'claude-sonnet-4-6' };
+
+  if (!prompt) return { error: 'Context build failed' };
+
+  // Push context to renderer so Context Inspector can show it
+  if (ctx) e.sender.send('noter:ai:context-ready', ctx);
+
+  // Stream API call (JS — I/O)
+  await aiProvider.streamQuery(prompt, e.sender);
+  return { success: true };
+});
+
+// noter:ai:cancel — abort current stream
+ipcMain.on("noter:ai:cancel", () => {
+  aiProvider?.cancelStream();
+});
+
+// noter:ai:context — return last built context (for Context Inspector)
+ipcMain.handle("noter:ai:context", (e, { workspaceRoot, query, symbolDbPath, project }) => {
+  const nativeProject = {
+    language:     project?.language     || '',
+    framework:    project?.framework    || null,
+    architecture: project?.architecture || null,
+    database:     project?.database     || null,
+    orm:          project?.orm          || null,
+    authSystem:   project?.authSystem   || null,
+  };
+  return noterNative.buildAiContext
+    ? noterNative.buildAiContext(workspaceRoot, query, symbolDbPath || '', nativeProject)
+    : null;
+});
+
+// noter:ai:providers — list available providers and API key status
+ipcMain.handle("noter:ai:providers", () => {
+  return aiProvider ? aiProvider.listProviders() : [];
+});
+
+// noter:ai:set-key — store API key in memory (not persisted to disk for security)
+ipcMain.handle("noter:ai:set-key", (e, { key }) => {
+  if (aiProvider) aiProvider.setApiKey(key);
+  return { success: true };
+});
+
+// noter:ai:invalidate — bust context cache on workspace change
+ipcMain.handle("noter:ai:invalidate", (e, { workspaceRoot }) => {
+  noterNative.invalidateAiContext?.(workspaceRoot);
+  return { success: true };
+});
+
+// ─── Project Intelligence (Phase 1.5) ────────────────────────────────────────
+
+// noter:project:scan — full workspace scan (language / framework / arch / map)
+ipcMain.handle("noter:project:scan", (e, { workspaceRoot }) => {
+  const result = noterNative.scanProjectWorkspace(workspaceRoot);
+  if (!result) {
+    return { success: false, error: "Rust core unavailable", scanDurationMs: 0 };
+  }
+  return { success: true, ...result };
+});
+
+// noter:project:map — return only the project map (lightweight)
+ipcMain.handle("noter:project:map", (e, { workspaceRoot }) => {
+  const result = noterNative.scanProjectWorkspace(workspaceRoot);
+  return result ? result.projectMap : { modules: [] };
+});
+
+// noter:project:dependencies — return only deps list
+ipcMain.handle("noter:project:dependencies", (e, { workspaceRoot }) => {
+  const result = noterNative.scanProjectWorkspace(workspaceRoot);
+  return result ? result.dependencies : [];
+});
+
+// noter:project:architecture — return only architecture info
+ipcMain.handle("noter:project:architecture", (e, { workspaceRoot }) => {
+  const result = noterNative.scanProjectWorkspace(workspaceRoot);
+  return result ? result.architecture : { pattern: "unknown", confidence: 0, evidence: [] };
+});
+
+// noter:project:invalidate — bust the cache (call after package.json changes)
+ipcMain.handle("noter:project:invalidate", (e, { workspaceRoot }) => {
+  noterNative.invalidateProjectCache(workspaceRoot);
+  return { success: true };
+});
+
+// ─── Symbol Intelligence Engine (Phase 2.1) ──────────────────────────────────
+
+ipcMain.handle("noter:symbols:build-call-graph", (e, { workspaceRoot, symbolDbPath, callDbPath }) => {
+  const r = noterNative.buildSymbolCallGraph(workspaceRoot, symbolDbPath, callDbPath);
+  return r || { fileCount: 0, rawEdgeCount: 0, resolvedCount: 0, unresolvedCount: 0, durationMs: 0, error: "native core unavailable" };
+});
+
+ipcMain.handle("noter:symbols:hydrate", (e, { workspaceRoot, callDbPath }) => {
+  const count = noterNative.hydrateSymbolGraph(workspaceRoot, callDbPath);
+  return { edgeCount: count ?? 0 };
+});
+
+ipcMain.handle("noter:symbols:update-file", (e, { workspaceRoot, filePath, symbolDbPath, callDbPath }) => {
+  const count = noterNative.updateSymbolFile(workspaceRoot, filePath, symbolDbPath, callDbPath);
+  return { edgeCount: count ?? 0 };
+});
+
+ipcMain.handle("noter:symbols:find-callers", (e, { workspaceRoot, symbolId, symbolDbPath }) => {
+  return noterNative.findSymbolCallers(workspaceRoot, symbolId, symbolDbPath) || [];
+});
+
+ipcMain.handle("noter:symbols:find-callees", (e, { workspaceRoot, symbolId, symbolDbPath }) => {
+  return noterNative.findSymbolCallees(workspaceRoot, symbolId, symbolDbPath) || [];
+});
+
+ipcMain.handle("noter:symbols:find-implementations", (e, { workspaceRoot, interfaceName, symbolDbPath }) => {
+  return noterNative.findSymbolImplementations(workspaceRoot, interfaceName, symbolDbPath) || [];
+});
+
+ipcMain.handle("noter:symbols:trace-flow", (e, { workspaceRoot, startSymbolId, maxDepth, symbolDbPath }) => {
+  return noterNative.traceExecutionFlow(workspaceRoot, startSymbolId, maxDepth ?? 8, symbolDbPath)
+    || { steps: [], maxDepthReached: false, totalHops: 0 };
+});
+
+ipcMain.handle("noter:symbols:get-impact", (e, { workspaceRoot, symbolId, symbolDbPath }) => {
+  return noterNative.getSymbolImpact(workspaceRoot, symbolId, symbolDbPath)
+    || { symbolId, symbolName: "", directCallers: [], transitiveCount: 0 };
+});
+
+// ─── Code Graph Engine (Phase 2) ─────────────────────────────────────────────
+
+ipcMain.handle("noter:graph:build", (e, { workspaceRoot }) => {
+  return noterNative.buildCodeGraph(workspaceRoot)
+    || { isBuilt: false, error: "native core unavailable" };
+});
+
+ipcMain.handle("noter:graph:stats", (e, { workspaceRoot }) => {
+  return noterNative.getGraphStats(workspaceRoot);
+});
+
+ipcMain.handle("noter:graph:invalidate", (e, { workspaceRoot }) => {
+  noterNative.invalidateCodeGraph(workspaceRoot);
+  return { success: true };
+});
+
+ipcMain.handle("noter:graph:update-file", (e, { workspaceRoot, filePath }) => {
+  return { existed: noterNative.updateGraphFile(workspaceRoot, filePath) };
+});
+
+ipcMain.handle("noter:graph:query-node", (e, { workspaceRoot, name }) => {
+  return noterNative.queryGraphNode(workspaceRoot, name);
+});
+
+ipcMain.handle("noter:graph:file-imports", (e, { workspaceRoot, filePath }) => {
+  return noterNative.getFileImports(workspaceRoot, filePath);
+});
+
+ipcMain.handle("noter:graph:file-importers", (e, { workspaceRoot, filePath }) => {
+  return noterNative.getFileImporters(workspaceRoot, filePath);
+});
+
+ipcMain.handle("noter:graph:impact", (e, { workspaceRoot, filePath }) => {
+  return noterNative.analyzeImpact(workspaceRoot, filePath);
+});
+
+ipcMain.handle("noter:graph:dead-code", (e, { workspaceRoot }) => {
+  return noterNative.findDeadCode(workspaceRoot);
+});
+
+ipcMain.handle("noter:graph:cycles", (e, { workspaceRoot }) => {
+  return noterNative.findDependencyCycles(workspaceRoot);
+});
+
+ipcMain.handle("noter:graph:arch-violations", (e, { workspaceRoot, pattern }) => {
+  return noterNative.checkArchViolations(workspaceRoot, pattern);
+});
+
+ipcMain.handle("noter:graph:find-path", (e, { workspaceRoot, fromFile, toFile }) => {
+  return noterNative.findImportPath(workspaceRoot, fromFile, toFile);
+});
+
+// ─── Incremental Watch Engine (Phase 1.75) ────────────────────────────────────
+
+// Active workspace roots being watched → their poll intervals
+const _watchPollers = new Map();
+
+// noter:index:watch:start — start Rust watch engine + polling loop
+ipcMain.handle("noter:index:watch:start", (e, { workspaceRoot }) => {
+  if (!noterNative.isAvailable()) return { success: false, error: "native core unavailable" };
+  if (_watchPollers.has(workspaceRoot)) return { success: true, alreadyWatching: true };
+
+  const started = noterNative.startWorkspaceWatch(workspaceRoot);
+  if (!started) return { success: false, error: "failed to start watch engine" };
+
+  // Poll for change events every 100ms, push to renderer
+  const interval = setInterval(() => {
+    const events = noterNative.pollWatchEvents(workspaceRoot);
+    if (events && events.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("noter:index:file-changed", events);
+    }
+  }, 100);
+
+  _watchPollers.set(workspaceRoot, interval);
+  return { success: true, alreadyWatching: false };
+});
+
+// noter:index:watch:stop — stop watch engine and polling
+ipcMain.handle("noter:index:watch:stop", (e, { workspaceRoot }) => {
+  const interval = _watchPollers.get(workspaceRoot);
+  if (interval) { clearInterval(interval); _watchPollers.delete(workspaceRoot); }
+  noterNative.stopWorkspaceWatch(workspaceRoot);
+  return { success: true };
+});
+
+// noter:index:watch:stats — snapshot stats (files indexed, symbols found)
+ipcMain.handle("noter:index:watch:stats", (e, { workspaceRoot }) => {
+  return noterNative.getWatchStats(workspaceRoot) || { isWatching: false };
+});
+
+// noter:index:reindex-file — force reindex one file (call on editor save)
+ipcMain.handle("noter:index:reindex-file", (e, { workspaceRoot, filePath }) => {
+  const queued = noterNative.requestFileReindex(workspaceRoot, filePath);
+  return { success: !!queued };
+});
+
+// Clean up all watchers when app quits
+app.on("before-quit", () => {
+  for (const [root, interval] of _watchPollers) {
+    clearInterval(interval);
+    noterNative.stopWorkspaceWatch(root);
+  }
+  _watchPollers.clear();
+});

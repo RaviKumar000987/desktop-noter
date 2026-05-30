@@ -17,6 +17,7 @@ pub enum ServiceId {
     Extensions,
     Watcher,
     Cache,
+    ProjectEngine,
 }
 
 impl std::fmt::Display for ServiceId {

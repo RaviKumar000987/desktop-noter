@@ -1,15 +1,14 @@
 [package]
 name = "noter-ai-context"
-description = "AI context engine — assembles workspace graph + symbols for AI queries (Phase 9)"
+description = "Phase 2.2 — AI Context Engine: query-driven retrieval, symbol ranking, context assembly, prompt building for LLM queries"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-serde.workspace = true
+anyhow.workspace    = true
+serde.workspace     = true
 serde_json.workspace = true
-anyhow.workspace = true
-tracing.workspace = true
-noter-core-api  = { path = "../noter-core-api" }
-noter-symboldb  = { path = "../noter-symboldb" }
-noter-graph     = { path = "../noter-graph" }
-noter-git       = { path = "../noter-git" }
+tracing.workspace   = true
+once_cell.workspace = true
+regex.workspace     = true
+rusqlite = { version = "0.31", features = ["bundled"] }

@@ -1,0 +1,14 @@
+[package]
+name = "noter-index-engine"
+description = "Phase 1.75 — Incremental Workspace Index: WorkspaceSnapshot (hash-based change detection), ChangeQueue (debounce), IncrementalIndexer (< 100ms per-file reindex)"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace    = true
+serde.workspace     = true
+serde_json.workspace = true
+tracing.workspace   = true
+walkdir.workspace   = true
+noter-core-api      = { path = "../noter-core-api" }
+noter-indexer       = { path = "../noter-indexer" }

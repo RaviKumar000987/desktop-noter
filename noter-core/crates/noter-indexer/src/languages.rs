@@ -1,5 +1,11 @@
 use tree_sitter::Language;
 
+/// Returns true if this file extension is supported by the indexer.
+/// Used by noter-index-engine to filter files before hashing.
+pub fn is_indexable_ext(ext: &str) -> bool {
+    get_language(ext).is_some()
+}
+
 pub fn get_language(ext: &str) -> Option<Language> {
     match ext {
         "js" | "jsx" | "mjs" | "cjs" => Some(tree_sitter_javascript::language()),

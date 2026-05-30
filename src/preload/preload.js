@@ -169,13 +169,29 @@ contextBridge.exposeInMainWorld("noter", {
     text:    (req) => ipcRenderer.invoke("noter:search:text",    req),
   },
 
-  // ── Index — workspace indexing ──────────────────────────────────────────
+  // ── Index — workspace indexing (Phase 1 legacy + Phase 1.75 incremental) ──
   index: {
+    // Phase 1 — full workspace index (legacy, kept for compatibility)
     workspace:      (req) => ipcRenderer.invoke("noter:index:workspace", req),
     onProgress:     (cb)  => ipcRenderer.on("noter:index:progress",  (_e, d) => cb(d)),
     onComplete:     (cb)  => ipcRenderer.on("noter:index:complete",  (_e, d) => cb(d)),
     offProgress:    ()    => ipcRenderer.removeAllListeners("noter:index:progress"),
     offComplete:    ()    => ipcRenderer.removeAllListeners("noter:index:complete"),
+
+    // Phase 1.75 — incremental watch engine
+    // window.noter.index.watch.start({ workspaceRoot }) → starts Rust WatchEngine
+    // window.noter.index.watch.stop({ workspaceRoot })  → stops it
+    // window.noter.index.watch.stats({ workspaceRoot }) → snapshot stats
+    // window.noter.index.reindexFile({ workspaceRoot, filePath }) → force reindex
+    // window.noter.index.onFileChanged(cb)  → push events from Rust (batched, ≤100ms)
+    watch: {
+      start:  (req) => ipcRenderer.invoke("noter:index:watch:start", req),
+      stop:   (req) => ipcRenderer.invoke("noter:index:watch:stop",  req),
+      stats:  (req) => ipcRenderer.invoke("noter:index:watch:stats", req),
+    },
+    reindexFile:      (req) => ipcRenderer.invoke("noter:index:reindex-file", req),
+    onFileChanged:    (cb)  => ipcRenderer.on("noter:index:file-changed",  (_e, events) => cb(events)),
+    offFileChanged:   ()    => ipcRenderer.removeAllListeners("noter:index:file-changed"),
   },
 
   // ── Runtime — service health (Phase 0.5) ───────────────────────────────
@@ -212,5 +228,87 @@ contextBridge.exposeInMainWorld("noter", {
     scan:       (req) => ipcRenderer.invoke("noter:workspace:scan",    req),
     projectMap: (req) => ipcRenderer.invoke("noter:workspace:map",     req),
     memory:     (req) => ipcRenderer.invoke("noter:workspace:memory",  req),
+  },
+
+  // ── Graph — Code Graph Engine (Phase 2) ────────────────────────────────
+  // window.noter.graph.build({ workspaceRoot })          → GraphStats
+  // window.noter.graph.impact({ workspaceRoot, filePath }) → ImpactResult
+  // window.noter.graph.deadCode({ workspaceRoot })        → UnusedSymbol[]
+  // window.noter.graph.cycles({ workspaceRoot })          → Cycle[]
+  // window.noter.graph.archViolations({ workspaceRoot, pattern }) → Violation[]
+  graph: {
+    build:         (req) => ipcRenderer.invoke("noter:graph:build",          req),
+    stats:         (req) => ipcRenderer.invoke("noter:graph:stats",          req),
+    invalidate:    (req) => ipcRenderer.invoke("noter:graph:invalidate",     req),
+    updateFile:    (req) => ipcRenderer.invoke("noter:graph:update-file",    req),
+    queryNode:     (req) => ipcRenderer.invoke("noter:graph:query-node",     req),
+    fileImports:   (req) => ipcRenderer.invoke("noter:graph:file-imports",   req),
+    fileImporters: (req) => ipcRenderer.invoke("noter:graph:file-importers", req),
+    impact:        (req) => ipcRenderer.invoke("noter:graph:impact",         req),
+    deadCode:      (req) => ipcRenderer.invoke("noter:graph:dead-code",      req),
+    cycles:        (req) => ipcRenderer.invoke("noter:graph:cycles",         req),
+    archViolations:(req) => ipcRenderer.invoke("noter:graph:arch-violations",req),
+    findPath:      (req) => ipcRenderer.invoke("noter:graph:find-path",      req),
+  },
+
+  // ── AI — AI Context Engine + Claude streaming (Phase 2.2) ────────────
+  // window.noter.ai.query({ workspaceRoot, query, symbolDbPath, project, model })
+  //   → starts stream. Listen on onToken/onDone/onError for response.
+  // window.noter.ai.context({ workspaceRoot, query, symbolDbPath, project })
+  //   → returns AiContext (what was sent to AI) for Context Inspector.
+  ai: {
+    query:     (req)  => ipcRenderer.invoke("noter:ai:query",     req),
+    cancel:    ()     => ipcRenderer.send("noter:ai:cancel"),
+    context:   (req)  => ipcRenderer.invoke("noter:ai:context",   req),
+    providers: ()     => ipcRenderer.invoke("noter:ai:providers"),
+    setKey:    (req)  => ipcRenderer.invoke("noter:ai:set-key",   req),
+    invalidate:(req)  => ipcRenderer.invoke("noter:ai:invalidate",req),
+
+    // Push events: main → renderer (streaming tokens)
+    onToken:         (cb) => ipcRenderer.on("noter:ai:token",         (_e, d) => cb(d)),
+    onDone:          (cb) => ipcRenderer.on("noter:ai:done",          (_e, d) => cb(d)),
+    onError:         (cb) => ipcRenderer.on("noter:ai:error",         (_e, d) => cb(d)),
+    onContextReady:  (cb) => ipcRenderer.on("noter:ai:context-ready", (_e, d) => cb(d)),
+    offToken:        ()   => ipcRenderer.removeAllListeners("noter:ai:token"),
+    offDone:         ()   => ipcRenderer.removeAllListeners("noter:ai:done"),
+    offError:        ()   => ipcRenderer.removeAllListeners("noter:ai:error"),
+    offContextReady: ()   => ipcRenderer.removeAllListeners("noter:ai:context-ready"),
+  },
+
+  // ── Symbols — Symbol Intelligence Engine (Phase 2.1) ──────────────────
+  // All query methods hit RAM graph — sub-ms latency.
+  // buildCallGraph() must be called once per workspace before queries work.
+  // window.noter.symbols.buildCallGraph({ workspaceRoot, symbolDbPath, callDbPath })
+  // window.noter.symbols.findCallers({ workspaceRoot, symbolId, symbolDbPath })
+  // window.noter.symbols.traceFlow({ workspaceRoot, startSymbolId, maxDepth, symbolDbPath })
+  symbols: {
+    buildCallGraph:      (req) => ipcRenderer.invoke("noter:symbols:build-call-graph", req),
+    hydrate:             (req) => ipcRenderer.invoke("noter:symbols:hydrate",          req),
+    updateFile:          (req) => ipcRenderer.invoke("noter:symbols:update-file",      req),
+    findCallers:         (req) => ipcRenderer.invoke("noter:symbols:find-callers",     req),
+    findCallees:         (req) => ipcRenderer.invoke("noter:symbols:find-callees",     req),
+    findImplementations: (req) => ipcRenderer.invoke("noter:symbols:find-implementations", req),
+    traceFlow:           (req) => ipcRenderer.invoke("noter:symbols:trace-flow",       req),
+    getImpact:           (req) => ipcRenderer.invoke("noter:symbols:get-impact",       req),
+  },
+
+  // ── Project — Rust-powered project intelligence (Phase 1.5) ────────────
+  // window.noter.project.scan({ workspaceRoot }) → ProjectInfo
+  // window.noter.project.map({ workspaceRoot })  → ProjectMap
+  // window.noter.project.dependencies({ workspaceRoot }) → DependencyNode[]
+  // window.noter.project.architecture({ workspaceRoot }) → ArchitectureInfo
+  // window.noter.project.invalidate({ workspaceRoot }) → void
+  project: {
+    scan:         (req) => ipcRenderer.invoke("noter:project:scan",         req),
+    map:          (req) => ipcRenderer.invoke("noter:project:map",          req),
+    dependencies: (req) => ipcRenderer.invoke("noter:project:dependencies", req),
+    architecture: (req) => ipcRenderer.invoke("noter:project:architecture", req),
+    invalidate:   (req) => ipcRenderer.invoke("noter:project:invalidate",   req),
+
+    // Push events: main → renderer when a background scan completes
+    onScanComplete: (cb) => ipcRenderer.on("noter:project:scan-complete", (_e, d) => cb(d)),
+    onScanError:    (cb) => ipcRenderer.on("noter:project:scan-error",    (_e, d) => cb(d)),
+    offScanComplete: ()  => ipcRenderer.removeAllListeners("noter:project:scan-complete"),
+    offScanError:    ()  => ipcRenderer.removeAllListeners("noter:project:scan-error"),
   },
 });

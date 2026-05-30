@@ -1136,6 +1136,9 @@ async function openExplorerFolder(folderPath) {
   }
 
   explorerState.rootPath = folderPath;
+  // Global accessor so Project Overview / Code Graph panels can read the open folder
+  // without needing to catch the workspace-opened event (handles already-open folder case)
+  window.currentFolderPath = folderPath;
 
   document.getElementById("no-folder-msg").style.display = "none";
   const content = document.getElementById("explorer-content");

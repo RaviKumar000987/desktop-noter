@@ -10,3 +10,6 @@ pub mod lsp;
 pub mod search;
 pub mod git;
 pub mod runtime;
+pub mod project;
+pub mod index;
+pub mod graph;

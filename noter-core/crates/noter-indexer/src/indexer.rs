@@ -14,6 +14,12 @@ impl WorkspaceIndexer {
         Self
     }
 
+    /// Index a single file and return its symbols.
+    /// Performance target: < 100ms for files ≤ 64KB.
+    pub fn index_single_file(&self, path: &Path, workspace_root: &str) -> Result<Vec<Symbol>> {
+        self.index_file(path, workspace_root)
+    }
+
     pub fn index_workspace(&self, root: &str) -> Result<Vec<Symbol>> {
         let files: Vec<_> = WalkDir::new(root)
             .into_iter()
